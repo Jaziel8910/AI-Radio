@@ -61,6 +61,16 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
             visualizerStyle: baseOptions.visualizerStyle || 'bars',
             visualizerColorPalette: baseOptions.visualizerColorPalette || 'neon_purple',
             crossfadeDuration: baseOptions.crossfadeDuration || 1,
+            // New options with defaults
+            dataRichness: 'medium',
+            djBanterStyle: 'standard',
+            songIntroductionStyle: 'direct',
+            stationIdentificationFrequency: 'low',
+            includeWeatherReports: false,
+            includeTimeAnnouncements: false,
+            showPacing: 'medium',
+            endingStyle: 'fade_out',
+            soundEffectLevel: 'none',
         };
     };
 
@@ -118,30 +128,45 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
         <div className="space-y-4">
              <h4 className="text-lg font-semibold text-purple-300">Estilo del DJ</h4>
              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium text-slate-300 mb-1">Duración Comentarios</label><select value={options.commentaryLength} onChange={e => handleChange('commentaryLength', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="short">Cortos</option><option value="standard">Estándar</option><option value="long">Largos</option></select></div>
-                <div><label className="block text-sm font-medium text-slate-300 mb-1">Posición Comentarios</label><select value={options.commentaryPlacement} onChange={e => handleChange('commentaryPlacement', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="before">Antes</option><option value="intro">En la intro</option><option value="varied">Variado</option></select></div>
+                <div><label className="block text-sm font-medium text-slate-300 mb-1">Estilo de Charla</label><select value={options.djBanterStyle} onChange={e => handleChange('djBanterStyle', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="standard">Estándar</option><option value="storyteller">Cuentacuentos</option><option value="interviewer">Entrevistador</option></select></div>
+                <div><label className="block text-sm font-medium text-slate-300 mb-1">Riqueza de Datos</label><select value={options.dataRichness} onChange={e => handleChange('dataRichness', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="low">Baja</option><option value="medium">Media</option><option value="high">Alta</option></select></div>
+                <div><label className="block text-sm font-medium text-slate-300 mb-1">Introducción de Canción</label><select value={options.songIntroductionStyle} onChange={e => handleChange('songIntroductionStyle', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="direct">Directa</option><option value="teaser">Con Pista</option><option value="lyrical_quote">Con Frase</option></select></div>
                 <div><label className="block text-sm font-medium text-slate-300 mb-1">Estilo de Lenguaje</label><select value={options.languageStyle} onChange={e => handleChange('languageStyle', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="formal">Formal</option><option value="colloquial">Coloquial</option><option value="poetic">Poético</option></select></div>
              </div>
-            <Toggle label="Incluir llamadas de oyentes" checked={options.includeCallIns} onChange={c => handleChange('includeCallIns', c)} description="Simula llamadas de oyentes falsos."/>
             <Toggle label="Mencionar artistas relacionados" checked={options.mentionRelatedArtists} onChange={c => handleChange('mentionRelatedArtists', c)} description="El DJ conectará con artistas similares."/>
             <hr className="border-slate-700" />
-            <h4 className="text-lg font-semibold text-purple-300">Anuncios y Jingles</h4>
-             <div><label className="block text-sm font-medium text-slate-300 mb-1">Frecuencia de Anuncios</label><select value={options.adFrequency} onChange={e => handleChange('adFrequency', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="none">Ninguna</option><option value="low">Baja</option><option value="medium">Media</option><option value="high">Alta</option></select></div>
-            {options.adFrequency !== 'none' && <div><label className="block text-sm font-medium text-slate-300 mb-1">Anuncios Personalizados (uno por línea)</label><textarea value={options.customAds} onChange={e => handleChange('customAds', e.target.value)} rows={3} placeholder="Si está vacío, la IA los inventará." className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"/></div>}
-             <Toggle label="Incluir Jingles de la Estación" checked={options.includeJingles} onChange={c => handleChange('includeJingles', c)} />
+            <h4 className="text-lg font-semibold text-purple-300">Extras de la Estación</h4>
+            <div className="grid grid-cols-2 gap-4">
+                 <div><label className="block text-sm font-medium text-slate-300 mb-1">Frecuencia de Anuncios</label><select value={options.adFrequency} onChange={e => handleChange('adFrequency', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="none">Ninguna</option><option value="low">Baja</option><option value="medium">Media</option><option value="high">Alta</option></select></div>
+                 <div><label className="block text-sm font-medium text-slate-300 mb-1">ID de la Estación</label><select value={options.stationIdentificationFrequency} onChange={e => handleChange('stationIdentificationFrequency', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="none">Nunca</option><option value="low">A veces</option><option value="high">Frecuente</option></select></div>
+            </div>
+            {options.adFrequency !== 'none' && <div><label className="block text-sm font-medium text-slate-300 mb-1">Anuncios Personalizados (uno por línea)</label><textarea value={options.customAds} onChange={e => handleChange('customAds', e.target.value)} rows={2} placeholder="Si está vacío, la IA los inventará." className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"/></div>}
+            <div className="grid grid-cols-2 gap-4">
+                <Toggle label="Incluir Jingles" checked={options.includeJingles} onChange={c => handleChange('includeJingles', c)} />
+                <Toggle label="Incluir llamadas de oyentes" checked={options.includeCallIns} onChange={c => handleChange('includeCallIns', c)}/>
+                <Toggle label="Incluir informes del tiempo" checked={options.includeWeatherReports} onChange={c => handleChange('includeWeatherReports', c)}/>
+                <Toggle label="Incluir anuncios de hora" checked={options.includeTimeAnnouncements} onChange={c => handleChange('includeTimeAnnouncements', c)}/>
+            </div>
         </div>
     );
 
     const renderVisualsTab = () => (
         <div className="space-y-4">
-            <h4 className="text-lg font-semibold text-purple-300">Visuales y Audio</h4>
+            <h4 className="text-lg font-semibold text-purple-300">Ritmo y Flujo</h4>
+            <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-sm font-medium text-slate-300 mb-1">Ritmo del Show</label><select value={options.showPacing} onChange={e => handleChange('showPacing', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="slow">Lento</option><option value="medium">Medio</option><option value="fast">Rápido</option></select></div>
+                <div><label className="block text-sm font-medium text-slate-300 mb-1">Estilo de Final</label><select value={options.endingStyle} onChange={e => handleChange('endingStyle', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="fade_out">Desvanecido</option><option value="abrupt">Abrupto</option><option value="cliffhanger">Con suspense</option></select></div>
+            </div>
+             <Slider label="Duración de Crossfade" value={options.crossfadeDuration} onChange={v => handleChange('crossfadeDuration', v)} min={0} max={5} step={0.5} minLabel="0s" maxLabel="5s" />
+            <hr className="border-slate-700" />
+            <h4 className="text-lg font-semibold text-purple-300">Visuales y Audio Ambiental</h4>
             <Toggle label="Generar Portada para el Show" checked={options.generateShowArt} onChange={c => handleChange('generateShowArt', c)} description="La IA creará una imagen única para la sesión." />
             {options.generateShowArt && <div><label className="block text-sm font-medium text-slate-300 mb-1">Prompt Negativo para la Portada</label><input type="text" value={options.negativeShowArtPrompt} onChange={e => handleChange('negativeShowArtPrompt', e.target.value)} placeholder="Ej: texto, caras, colores apagados" className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"/></div>}
             <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-sm font-medium text-slate-300 mb-1">Estilo del Visualizador</label><select value={options.visualizerStyle} onChange={e => handleChange('visualizerStyle', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="bars">Barras</option><option value="waveform">Onda</option><option value="circle">Círculo</option></select></div>
                 <div><label className="block text-sm font-medium text-slate-300 mb-1">Paleta de Colores</label><select value={options.visualizerColorPalette} onChange={e => handleChange('visualizerColorPalette', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="neon_purple">Neón Púrpura</option><option value="fire_ice">Fuego y Hielo</option><option value="emerald_forest">Bosque Esmeralda</option><option value="monochrome">Monocromático</option></select></div>
             </div>
-            <Slider label="Duración de Crossfade" value={options.crossfadeDuration} onChange={v => handleChange('crossfadeDuration', v)} min={0} max={5} step={0.5} minLabel="0s" maxLabel="5s" />
+             <div><label className="block text-sm font-medium text-slate-300 mb-1">Efectos de Sonido</label><select value={options.soundEffectLevel} onChange={e => handleChange('soundEffectLevel', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="none">Ninguno</option><option value="subtle">Sutil</option><option value="immersive">Inmersivo</option></select></div>
         </div>
     );
 
@@ -161,7 +186,7 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
                      <div className="mb-6 border-b border-slate-700 flex flex-wrap">
                         <button type="button" onClick={() => setActiveTab('content')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeTab === 'content' ? 'text-purple-300 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white border-b-2 border-transparent'}`}>Contenido</button>
                         <button type="button" onClick={() => setActiveTab('style')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeTab === 'style' ? 'text-purple-300 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white border-b-2 border-transparent'}`}>Estilo DJ y Extras</button>
-                        <button type="button" onClick={() => setActiveTab('visuals')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeTab === 'visuals' ? 'text-purple-300 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white border-b-2 border-transparent'}`}>Visual y Audio</button>
+                        <button type="button" onClick={() => setActiveTab('visuals')} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeTab === 'visuals' ? 'text-purple-300 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white border-b-2 border-transparent'}`}>Ritmo y Audio</button>
                     </div>
 
                     {activeTab === 'content' && renderContentTab()}

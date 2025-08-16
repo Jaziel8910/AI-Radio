@@ -65,22 +65,38 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
                 audio.play().catch(reject);
             });
     
-        } catch (err) {
+        } catch (err: any) {
             let errorDetails = "Ocurrió un error desconocido.";
             
+            // Log the raw error to the console for debugging
+            console.error("Error al probar la voz (raw):", err);
+
             if (err instanceof Error) {
-                errorDetails = err.message;
-            } else if (typeof err === 'object' && err !== null) {
-                errorDetails = JSON.stringify(err);
-            } else {
+                // For DOMException and other Error types
+                errorDetails = `${err.name}: ${err.message}`;
+            } else if (err && typeof err === 'object') {
+                // For other objects, try to extract a message or stringify
+                if (err.message) {
+                    errorDetails = String(err.message);
+                } else {
+                    try {
+                        errorDetails = JSON.stringify(err);
+                    } catch (e) {
+                        errorDetails = "El objeto de error no se puede mostrar (posiblemente una referencia circular).";
+                    }
+                }
+            } else if (err) {
+                // For primitive types
                 errorDetails = String(err);
             }
             
-            console.error("Error al probar la voz:", err);
-            
             let userMessage = `No se pudo generar la muestra de voz.\nDetalles: ${errorDetails}`;
-            if (errorDetails.toLowerCase().includes('failed to fetch')) {
-                userMessage += "\n\nEste error ('Failed to fetch') suele indicar un problema de red o permisos (CORS). Asegúrate de tener conexión a internet y que la aplicación se ejecuta en un entorno compatible (como Puter OS).";
+
+            // Add specific advice for common errors
+            if (err?.name === 'NotAllowedError' || (typeof errorDetails === 'string' && errorDetails.includes('NotAllowedError'))) {
+                userMessage += "\n\nSugerencia: El navegador bloqueó la reproducción automática. Por favor, interactúa con la página (haz clic en cualquier lugar) y vuelve a intentarlo.";
+            } else if (typeof errorDetails === 'string' && errorDetails.toLowerCase().includes('failed to fetch')) {
+                userMessage += "\n\nSugerencia: Este error ('Failed to fetch') suele indicar un problema de red o permisos (CORS). Asegúrate de tener conexión a internet y que la aplicación se ejecuta en un entorno compatible (como Puter OS).";
             }
             
             alert(userMessage);

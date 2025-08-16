@@ -257,8 +257,30 @@ export const createRadioShow = async (songs: AnalyzedSong[], dj: ResidentDJ, opt
       `Contexto del Show: ${options.showContext || 'Una sesión más para nosotros.'}`
   ];
   if (options.timeCapsuleYear) contextInstructions.push(`MODO TIME CAPSULE: Estás transmitiendo desde el año ${options.timeCapsuleYear}. TODO tu conocimiento y referencias DEBEN ser de ese año o anteriores.`);
-  if (options.includeCallIns) contextInstructions.push(`INCLUIR LLAMADAS: Simula 1 o 2 llamadas cortas de oyentes falsos durante el show.`);
   if (options.mentionRelatedArtists) contextInstructions.push(`MENCIONAR ARTISTAS RELACIONADOS: Cuando sea apropiado, menciona brevemente a artistas similares o influencias de la canción actual.`);
+  
+  const djStyleInstructions = [
+    `Estilo de Charla: ${options.djBanterStyle}`,
+    `Riqueza de Datos: ${options.dataRichness}`,
+    `Introducción de Canciones: ${options.songIntroductionStyle}`,
+    `Estilo de Lenguaje: ${options.languageStyle}`
+  ];
+  
+  const stationElementsInstructions = [
+      `Pausas Publicitarias: ${getAdPrompt(options.adFrequency, options.customAds)}`,
+      `Jingles: ${options.includeJingles ? `Crea 2-3 jingles cortos y pegadizos para "La Estación de ${dj.name}" o "AI Radio" y distribúyelos.` : 'No incluyas jingles.'}`,
+      `Identificación de la Estación: ${options.stationIdentificationFrequency}`,
+      `Llamadas Falsas: ${options.includeCallIns ? 'Incluye 1 o 2 llamadas cortas de oyentes falsos.' : 'No incluyas llamadas.'}`,
+      `Informes del Tiempo: ${options.includeWeatherReports ? 'Incluye 1 o 2 informes del tiempo atmosféricos que encajen con el mood.' : 'No incluyas informes del tiempo.'}`,
+      `Anuncios de Hora: ${options.includeTimeAnnouncements ? 'Anuncia la hora (falsa) de vez en cuando.' : 'No anuncies la hora.'}`
+  ];
+  
+  const flowInstructions = [
+      `Ritmo del show: ${options.showPacing}.`,
+      `Estilo de Finalización: ${options.endingStyle}.`,
+      `Duración de Comentarios: ${getCommentaryPrompt(options.commentaryLength)}`,
+      `Posición del Comentario: ${options.commentaryPlacement === 'before' ? 'Antes de la canción.' : options.commentaryPlacement === 'intro' ? 'Sobre la intro instrumental.' : 'Varía la posición.'}`
+  ];
   
   const prompt = `
     Tu tarea es actuar como ${dj.name}, un DJ de radio residente y compañero musical del usuario. Eres una entidad persistente con memoria.
@@ -272,22 +294,26 @@ export const createRadioShow = async (songs: AnalyzedSong[], dj: ResidentDJ, opt
 
     **3. CONTEXTO Y DIRECTIVAS PARA ESTA SESIÓN:**
     ${contextInstructions.map(c => `- ${c}`).join('\n    ')}
+    
+    **4. ESTILO DEL DJ PARA ESTA SESIÓN:**
+    ${djStyleInstructions.map(c => `- ${c}`).join('\n    ')}
 
-    **4. Instrucciones de la Sesión:**
+    **5. ELEMENTOS DE LA ESTACIÓN PARA ESTA SESIÓN:**
+    ${stationElementsInstructions.map(c => `- ${c}`).join('\n    ')}
+
+    **6. RITMO Y FLUJO DE LA SESIÓN:**
+    - Ordena TODAS las canciones para un flujo coherente basado en el tema, el mood, la intención y tu conocimiento del oyente.
+    ${flowInstructions.map(c => `- ${c}`).join('\n    ')}
+
+    **7. INSTRUCCIONES ADICIONALES:**
     - **Búsqueda Obligatoria:** Usa la búsqueda de Google para encontrar datos interesantes (anécdotas, récords, contexto de creación, conexiones entre artistas) sobre las canciones/artistas e incorpóralos en tus comentarios. Cita las fuentes.
     - **Análisis de Género:** Clasifica CADA canción en UNO de los siguientes géneros: 'Rock', 'Electronic', 'Pop', 'Hip-Hop', 'Jazz', 'Classical', 'Vocal', 'Other'.
     - **Tema del Show:** ${options.theme ? `El tema que el usuario ha pedido para hoy es "${options.theme}".` : "No hay un tema específico, guíate por el mood y la intención."}
-    - **Flujo y Comentarios:**
-        1. Ordena TODAS las canciones para un flujo coherente basado en el tema, el mood, la intención y tu conocimiento del oyente.
-        2. ${getCommentaryPrompt(options.commentaryLength)}
-        3. Posición del Comentario: ${options.commentaryPlacement === 'before' ? 'El comentario DEBE ser hablado ANTES de cada canción.' : options.commentaryPlacement === 'intro' ? 'El comentario debe ocurrir sobre los primeros segundos instrumentales de la canción (intro).' : 'Varía la posición de tus comentarios, a veces antes, a veces sobre la intro.'}
-    - **Pausas Publicitarias:** ${getAdPrompt(options.adFrequency, options.customAds)}
-    - **Jingles:** ${options.includeJingles ? `Crea 2-3 jingles cortos y pegadizos para "La Estación de ${dj.name}" o "AI Radio" y distribúyelos entre las canciones.` : 'No incluyas jingles.'}
 
-    **5. Lista de Canciones para esta sesión (índice: "Título" por Artista):**
+    **8. Lista de Canciones para esta sesión (índice: "Título" por Artista):**
     ${songListForPrompt}
 
-    **6. Formato de Salida JSON Requerido:**
+    **9. Formato de Salida JSON Requerido:**
     Responde ÚNICAMENTE con un objeto JSON válido que siga esta estructura exacta. NO incluyas explicaciones ni markdown.
     {
       "showTitle": "Un nombre creativo y memorable para la sesión de hoy.",

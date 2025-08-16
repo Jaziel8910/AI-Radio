@@ -45,21 +45,33 @@ export interface CustomizationOptions {
   // Show Content
   intention: Intention;
   theme: string;
-  showContext: string; // Replaces dedication
-  audienceType: string; // e.g., "for a birthday party", "for late night coding"
+  showContext: string;
+  audienceType: string;
   timeOfDay: TimeOfDay;
   mood: { energy: number; vibe: number }; // -1 to 1 for both
   timeCapsuleYear: string;
+  dataRichness: 'low' | 'medium' | 'high'; // NEW
+  
+  // DJ Style
+  djBanterStyle: 'standard' | 'storyteller' | 'interviewer'; // NEW
+  songIntroductionStyle: 'direct' | 'teaser' | 'lyrical_quote'; // NEW
   commentaryLength: 'short' | 'standard' | 'long';
   commentaryPlacement: 'before' | 'intro' | 'varied';
   languageStyle: 'formal' | 'colloquial' | 'poetic';
+  
+  // Station Elements
   includeCallIns: boolean;
   mentionRelatedArtists: boolean;
-  
-  // Ads & Jingles
   adFrequency: 'none' | 'low' | 'medium' | 'high';
   customAds: string;
   includeJingles: boolean;
+  stationIdentificationFrequency: 'none' | 'low' | 'high'; // NEW
+  includeWeatherReports: boolean; // NEW
+  includeTimeAnnouncements: boolean; // NEW
+
+  // Pacing & Flow
+  showPacing: 'fast' | 'medium' | 'slow'; // NEW
+  endingStyle: 'abrupt' | 'fade_out' | 'cliffhanger'; // NEW
 
   // Visuals & Audio
   generateShowArt: boolean;
@@ -67,6 +79,7 @@ export interface CustomizationOptions {
   visualizerStyle: 'bars' | 'waveform' | 'circle';
   visualizerColorPalette: 'neon_purple' | 'fire_ice' | 'emerald_forest' | 'monochrome';
   crossfadeDuration: number; // 0-5 seconds
+  soundEffectLevel: 'none' | 'subtle' | 'immersive'; // NEW
 }
 
 export type Genre = 'Rock' | 'Electronic' | 'Pop' | 'Hip-Hop' | 'Jazz' | 'Classical' | 'Vocal' | 'Other' | string;
@@ -115,6 +128,7 @@ export interface RadioShow {
 export interface DJPersona {
   name: string;
   style: string; // Description for Gemini
+  category: string;
 }
 
 export interface DJDNA {

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AnalyzedSong, RadioShow, AppState, PlaylistItem, SongItem, Genre, Source, CustomizationOptions, ResidentDJ } from '../types';
 import { Play, Pause, MoreVertical, ThumbsUp, ThumbsDown, Share2, Maximize, X, FileText, Minimize, LoaderCircle, Volume2, Volume1, VolumeX, BookOpen, Clock, Radio } from 'lucide-react';
@@ -168,6 +169,7 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
 
       const source = context.createBufferSource();
       source.buffer = songBuffer;
+      // Connect source to the beginning of the audio chain
       source.connect(masterGainRef.current!);
       currentSourceRef.current = source;
       
@@ -440,16 +442,26 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
         analyserRef.current = context.createAnalyser();
         analyserRef.current.fftSize = 256;
         
+        // --- Definitive Audio Graph Wiring ---
+        // The flow is: source -> masterGain (for fades) -> volumeGain (for user volume) -> EQ chain -> analyser -> destination
         let lastNode: AudioNode = volumeGainRef.current;
         eqNodesRef.current = EQ_FREQUENCIES.map(f => {
             const filter = context.createBiquadFilter();
             filter.type = 'peaking'; filter.frequency.value = f; filter.Q.value = 1.5; filter.gain.value = 0;
-            lastNode.connect(filter); lastNode = filter; return filter;
+            // Connect the previous node to this filter, creating a chain
+            lastNode.connect(filter);
+            lastNode = filter; // This filter is now the last node
+            return filter;
         });
         
-        eqNodesRef.current[eqNodesRef.current.length - 1].connect(analyserRef.current);
-        masterGainRef.current.connect(lastNode);
-        volumeGainRef.current.connect(context.destination);
+        // Connect the end of the EQ chain to the analyser
+        lastNode.connect(analyserRef.current);
+        // Connect the analyser to the final output
+        analyserRef.current.connect(context.destination);
+        // Connect the master gain (fades) to the volume gain (user control)
+        masterGainRef.current.connect(volumeGainRef.current);
+        // Any new source will now connect to masterGainRef, and the chain is complete.
+        
         volumeGainRef.current.gain.value = isMuted ? 0 : volume;
 
         await Promise.all(songs.map(async (song) => {
