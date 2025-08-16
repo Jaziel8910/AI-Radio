@@ -15,6 +15,8 @@ interface AudDResponse {
     error?: object;
 }
 
+declare var puter: any;
+
 export async function identifySong(file: File): Promise<Partial<SongMetadata> | null> {
   const form = new FormData();
   form.append('file', file);
@@ -22,7 +24,10 @@ export async function identifySong(file: File): Promise<Partial<SongMetadata> | 
   form.append('return', 'spotify');
 
   try {
-    const res = await fetch('https://api.audd.io/', {
+    if (typeof puter?.fetch !== 'function') {
+        throw new Error('Puter fetch is not available.');
+    }
+    const res = await puter.fetch('https://api.audd.io/', {
       method: 'POST',
       body: form
     });
@@ -42,7 +47,7 @@ export async function identifySong(file: File): Promise<Partial<SongMetadata> | 
     }
     return null;
   } catch (err) {
-    console.error('Error contacting AudD.io API:', err);
+    console.error('Error contacting AudD.io API via Puter proxy:', err);
     return null;
   }
 }

@@ -1,7 +1,5 @@
-
-
-import { LibrarySong, SongMetadata } from '../types';
-import { extractMetadataFromFile } from './audioService';
+import { LibrarySong } from '../types';
+import { extractInitialMetadata } from './audioService';
 import { getSongId } from './historyService';
 import { enhanceSongsMetadata } from './geminiService';
 import * as auddService from './auddService';
@@ -35,14 +33,6 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-const isMetadataWeak = (metadata: SongMetadata, file: File): boolean => {
-    if (metadata.artist === 'Artista Desconocido') return true;
-    const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
-    if (metadata.title === fileNameWithoutExt || metadata.title === file.name) return true;
-    return false;
-};
-
-
 export async function addSongs(files: File[]): Promise<void> {
     const db = await openDB();
 
@@ -66,44 +56,44 @@ export async function addSongs(files: File[]): Promise<void> {
         })
     ));
 
-    // Step 3: Filter for new songs and process them (outside of any transaction).
+    // Step 3: Filter for new songs and process them.
     const newSongsToProcess = candidates.filter(c => !existingIds.has(c.id));
     if (newSongsToProcess.length === 0) {
       console.log('All dropped songs are already in the library.');
       return;
     }
 
-    // 3a: Extract basic metadata.
-    let songsWithInitialMeta: LibrarySong[] = await Promise.all(
+    // 3a: Extract minimal initial metadata (duration, filename parse).
+    let songsWithBaseMeta: LibrarySong[] = await Promise.all(
         newSongsToProcess.map(async ({ id, file }) => {
-            const metadata = await extractMetadataFromFile(file);
+            const metadata = await extractInitialMetadata(file);
             return { id, file, metadata };
         })
     );
 
-    // 3b: Enhance with AudD.io if metadata is weak
-    songsWithInitialMeta = await Promise.all(
-        songsWithInitialMeta.map(async (song) => {
-            if (isMetadataWeak(song.metadata, song.file)) {
-                console.log(`Weak metadata for "${song.file.name}", trying AudD.io...`);
-                const auddData = await auddService.identifySong(song.file);
-                if (auddData) {
-                    console.log(`AudD.io found a match for "${song.file.name}":`, auddData);
-                    return { ...song, metadata: { ...song.metadata, ...auddData } };
-                }
+    // 3b: Unconditionally try to identify with AudD.io for better base data.
+    let songsAfterAudd: LibrarySong[] = await Promise.all(
+        songsWithBaseMeta.map(async (song) => {
+            console.log(`Identifying "${song.file.name}" with AudD.io...`);
+            const auddData = await auddService.identifySong(song.file);
+            if (auddData) {
+                console.log(`AudD.io found a match:`, auddData);
+                // Merge AudD.io data with our initial data (especially keeping the reliable duration).
+                return { ...song, metadata: { ...song.metadata, ...auddData } };
             }
+            console.log(`AudD.io found no match for "${song.file.name}".`);
             return song;
         })
     );
 
 
-    // 3c: Enhance with AI (Gemini). This is the slow part.
+    // 3c: Enhance with AI (Gemini) for final details like cover art, year, genre.
     let songsToAdd: LibrarySong[];
     try {
-        songsToAdd = await enhanceSongsMetadata(songsWithInitialMeta);
+        songsToAdd = await enhanceSongsMetadata(songsAfterAudd);
     } catch (e) {
-        console.error("AI Metadata enhancement failed. Storing songs with basic metadata.", e);
-        songsToAdd = songsWithInitialMeta; // Fallback to basic metadata on error
+        console.error("AI Metadata enhancement failed. Storing songs with data from AudD/fallback.", e);
+        songsToAdd = songsAfterAudd; // Fallback to whatever we have before Gemini
     }
 
     // Step 4: Add the processed songs in a single write transaction.

@@ -10,6 +10,8 @@ if (!process.env.API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+declare var puter: any;
+
 // Moved from historyService to break circular dependency
 export const getHistorySummaryForPrompt = async (): Promise<string> => {
     const history = historyService.getHistory();
@@ -101,7 +103,10 @@ async function generateShowArt(title: string, theme: string, negativePrompt: str
 async function imageUrlToBase64(url: string): Promise<string | undefined> {
   if (!url) return undefined;
   try {
-    const response = await fetch(url);
+    if (typeof puter?.fetch !== 'function') {
+        throw new Error('Puter fetch is not available.');
+    }
+    const response = await puter.fetch(url);
     if (!response.ok) return undefined;
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) return undefined;
@@ -112,7 +117,7 @@ async function imageUrlToBase64(url: string): Promise<string | undefined> {
       reader.readAsDataURL(blob);
     });
   } catch (e) {
-    console.error(`Failed to convert image URL ${url} to base64`, e);
+    console.error(`Failed to convert image URL ${url} to base64 via Puter proxy`, e);
     return undefined;
   }
 }
