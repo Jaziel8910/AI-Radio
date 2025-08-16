@@ -46,7 +46,6 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   const cancellationRef = useRef<(() => void) | null>(null);
   const lastVolumeRef = useRef(volume);
   const sleepTimerRef = useRef<number | null>(null);
-  const currentPuterAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const currentPlaylistItem = playlistIndex >= 0 && playlistIndex < show.playlist.length ? show.playlist[playlistIndex] : null;
   const currentSongItem = currentPlaylistItem?.type === 'song' ? currentPlaylistItem as SongItem : null;
@@ -91,58 +90,60 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
 
   const speak = useCallback(async (text: string, isInterruptible: boolean = false): Promise<void> => {
     if (!isInterruptible) cleanupCurrentTask();
-    if (!text?.trim()) return Promise.resolve();
-    
-    return new Promise((resolve) => {
-      if (!isInterruptible) setPlayerStatus(PlayerStatus.SPEAKING);
-      setCurrentCommentary(text);
+    if (!text?.trim()) return;
 
-      const handleEnd = () => {
-        if (!isInterruptible) {
-          cancellationRef.current = null;
-          setCurrentCommentary('');
-        }
-        resolve();
-      };
-      
-      const puterOptions = {
-          language: dj.voiceLanguage || 'es-ES',
-          engine: dj.voiceEngine || 'neural',
-      };
+    return new Promise((resolve, reject) => {
+        if (!isInterruptible) setPlayerStatus(PlayerStatus.SPEAKING);
+        setCurrentCommentary(text);
 
-      puter.ai.txt2speech(text, puterOptions).then((audio: HTMLAudioElement) => {
-          currentPuterAudioRef.current = audio;
-          audio.play().catch(playError => {
-              console.error("Puter.js audio play() failed:", playError);
-              handleEnd();
-          });
-          audio.onended = handleEnd;
-          audio.onerror = (e: Event) => {
-              const audioElement = e.target as HTMLAudioElement;
-              let errorMessage = "An unknown playback error occurred.";
-              if (audioElement && audioElement.error) {
-                  errorMessage = `Code ${audioElement.error.code} - ${audioElement.error.message}`;
-              }
-              console.error("Puter.js TTS playback error:", errorMessage);
-              handleEnd();
-          };
-          if (!isInterruptible) {
-              cancellationRef.current = () => { if(audio) { audio.pause(); audio.src=''; } currentPuterAudioRef.current = null; };
-          }
-      }).catch((err: any) => {
-          let errorMessage = "Puter.js TTS generation failed.";
-          if (err instanceof Error) {
-              errorMessage += ` Message: ${err.message}`;
-          } else if (typeof err === 'object' && err !== null) {
-              errorMessage += ` Details: ${JSON.stringify(err)}`;
-          } else {
-              errorMessage += ` Details: ${String(err)}`;
-          }
-          console.error(errorMessage);
-          handleEnd();
-      });
+        const puterOptions = { language: dj.voiceLanguage || 'es-ES', engine: dj.voiceEngine || 'generative' };
+
+        puter.ai.txt2speech(text, puterOptions).then((ttsAudio: HTMLAudioElement) => {
+            const mainAudio = audioElementRef.current;
+            if (!mainAudio) {
+                console.error("El elemento de audio principal no existe. No se puede hablar.");
+                resolve(); // Resolve to not block the show flow
+                return;
+            }
+            
+            const handleEnd = () => {
+                mainAudio.removeEventListener('ended', handleEnd);
+                mainAudio.removeEventListener('error', handleError);
+                if (!isInterruptible) {
+                    cancellationRef.current = null;
+                    setCurrentCommentary('');
+                }
+                resolve();
+            };
+            
+            const handleError = (e: Event) => {
+                console.error("Error al reproducir el audio del DJ:", e);
+                mainAudio.removeEventListener('ended', handleEnd);
+                mainAudio.removeEventListener('error', handleError);
+                // Resolvemos igualmente para no bloquear el show
+                resolve();
+            };
+
+            mainAudio.addEventListener('ended', handleEnd);
+            mainAudio.addEventListener('error', handleError);
+
+            mainAudio.src = ttsAudio.src;
+            mainAudio.volume = isMuted ? 0 : volume;
+            mainAudio.play().catch(handleError);
+            
+            if (!isInterruptible) {
+                cancellationRef.current = () => {
+                    if (mainAudio) { mainAudio.pause(); mainAudio.src = ''; }
+                    handleEnd();
+                };
+            }
+        }).catch((err: any) => {
+            console.error("Error en la generación de voz de Puter:", err);
+            reject(err);
+        });
     });
-  }, [cleanupCurrentTask, setPlayerStatus, dj]);
+}, [cleanupCurrentTask, setPlayerStatus, dj.voiceLanguage, dj.voiceEngine, isMuted, volume]);
+
   
   const playSong = useCallback(async (song: LibrarySong): Promise<void> => {
       cleanupCurrentTask();

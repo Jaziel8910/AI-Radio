@@ -1,4 +1,5 @@
 
+
 declare var puter: any;
 
 const isPuterReady = () => typeof puter !== 'undefined' && puter.auth && puter.fs;

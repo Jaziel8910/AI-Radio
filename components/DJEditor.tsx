@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ResidentDJ, DJPersona, DJDNA } from '../types';
 import { DJ_PERSONAS, PUTER_LANGUAGES } from '../constants';
-import { User, Mic, Save, ArrowLeft, BrainCircuit, Heart, Zap, Annoyed, Volume2, FastForward, GitCommitHorizontal, Bot, LoaderCircle } from 'lucide-react';
+import { User, Mic, Save, ArrowLeft, BrainCircuit, Heart, Zap, Annoyed, Volume2, Bot, LoaderCircle } from 'lucide-react';
 
 declare var puter: any;
 
@@ -37,7 +37,6 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
     const [selectedPersona, setSelectedPersona] = useState<DJPersona>(dj?.persona || DJ_PERSONAS[0]);
     const [dna, setDna] = useState<DJDNA>(dj?.dna || { humor: 0, energy: 0, knowledge: 0, tone: 0 });
     
-    const [voiceEngine, setVoiceEngine] = useState(dj?.voiceEngine || 'generative');
     const [voiceLanguage, setVoiceLanguage] = useState(dj?.voiceLanguage || 'es-ES');
     const [isTestingVoice, setIsTestingVoice] = useState(false);
 
@@ -56,7 +55,7 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
             const text = `Hola, soy ${djName} y estoy probando mi nueva voz en AI Radio.`;
             const audio = await puter.ai.txt2speech(text, {
                 language: voiceLanguage,
-                engine: voiceEngine,
+                engine: 'generative',
             });
     
             // Wrap playback in a promise to await its completion
@@ -117,7 +116,7 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
             persona: selectedPersona,
             dna,
             voiceLanguage,
-            voiceEngine,
+            voiceEngine: 'generative',
         };
         onSave(savedDJ);
     };
@@ -157,7 +156,7 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
 
                  <div className="space-y-4 pt-4 border-t border-slate-700">
                     <h3 className="font-semibold text-lg text-center">Ajustes de Voz (IA)</h3>
-                     <p className="text-xs text-slate-400 bg-slate-900/50 p-3 rounded-md flex items-center gap-2"><Bot size={28}/>El motor Puter.js ofrece voces de IA de alta calidad.</p>
+                     <p className="text-xs text-slate-400 bg-slate-900/50 p-3 rounded-md flex items-center gap-2"><Bot size={28}/>El motor de voz generativo de Puter.js ofrece la máxima calidad.</p>
                      <div className="flex gap-2 items-end">
                         <div className="flex-grow">
                             <label htmlFor="puter-voice" className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2"><Volume2 size={16} className="text-purple-400"/> Idioma y Región</label>
@@ -168,14 +167,6 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
                         <button type="button" onClick={testVoice} disabled={isTestingVoice} className="bg-slate-700 h-12 px-4 rounded-lg hover:bg-slate-600 flex items-center justify-center disabled:bg-slate-800 disabled:cursor-wait">
                             {isTestingVoice ? <LoaderCircle size={20} className="animate-spin" /> : 'Probar'}
                         </button>
-                     </div>
-                     <div>
-                        <label htmlFor="puter-engine" className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2"><BrainCircuit size={16} className="text-purple-400"/> Calidad del Motor</label>
-                        <select id="puter-engine" value={voiceEngine} onChange={(e) => setVoiceEngine(e.target.value as any)} className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3 appearance-none">
-                            <option value="generative">Generativo (Recomendado)</option>
-                            <option value="neural">Neural (Obsoleto)</option>
-                            <option value="standard">Estándar (Obsoleto)</option>
-                        </select>
                      </div>
                 </div>
 

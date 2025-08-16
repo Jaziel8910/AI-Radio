@@ -1,6 +1,7 @@
 
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { AppState, AnalyzedSong, RadioShow, CustomizationOptions, LibrarySong, ResidentDJ } from './types';
+import { AppState, AnalyzedSong, RadioShow, CustomizationOptions, LibrarySong, ResidentDJ, AppSettings } from './types';
 import { createRadioShow } from './services/geminiService';
 import * as djService from './services/djService';
 import * as migrationService from './services/migrationService';
@@ -19,6 +20,48 @@ import { PlayCircle, Users, BookUser, LogOut, Radio, Music, MessageSquare, User,
 
 declare var puter: any;
 
+const defaultAppSettings: AppSettings = {
+  appLanguage: 'es',
+  appTheme: 'dark',
+  defaultIntention: 'Automatic',
+  startupView: 'HOME',
+  enableAnalytics: true,
+  audioQuality: 'high',
+  defaultVolume: 0.75,
+  globalCrossfadeDuration: 1.5,
+  enableAudioNormalization: true,
+  enableGaplessPlayback: true,
+  preloadNextSong: true,
+  rememberPlaybackPosition: true,
+  autoPlayOnStart: false,
+  showEndBehavior: 'return',
+  djVoiceVolumeBoost: 0.1,
+  musicDuckingAggressiveness: 0.6,
+  defaultVisualizerStyle: 'bars',
+  defaultVisualizerColorPalette: 'neon_purple',
+  reduceMotion: false,
+  showAlbumArtAsPlayerBackground: true,
+  compactLibraryView: false,
+  libraryShowPlayability: true,
+  libraryShowDuration: true,
+  libraryShowYear: true,
+  libraryShowAlbum: true,
+  timestampFormat: '24h',
+  showDJDiaryNotifications: true,
+  highContrastMode: false,
+  fontSize: 'medium',
+  dyslexicFriendlyFont: false,
+  enhancedFocusRings: true,
+  screenReaderVerbosity: 'standard',
+  alwaysShowDJTranscripts: false,
+  useBiggerControls: false,
+  pauseListeningHistory: false,
+  autoDeleteHistory: 'never',
+  enableLocationBasedContent: true,
+  enablePersonalizedAds: true,
+};
+
+
 const App: React.FC = () => {
   const [user, setUser] = useState<any | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -29,7 +72,7 @@ const App: React.FC = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-
+  const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [songsForPlayer, setSongsForPlayer] = useState<AnalyzedSong[]>([]);
   const [radioShow, setRadioShow] = useState<RadioShow | null>(null);
   const [currentOptions, setCurrentOptions] = useState<CustomizationOptions | null>(null);
@@ -37,23 +80,39 @@ const App: React.FC = () => {
 
   const activeDJ = allDJs.find(dj => dj.id === activeDJId) || null;
 
+  const loadAppSettings = useCallback(async () => {
+      if (typeof puter === 'undefined' || !puter.kv) return;
+      try {
+        const storedSettings = await puter.kv.get('aiRadioAppSettings');
+        if (storedSettings) {
+          setAppSettings({ ...defaultAppSettings, ...storedSettings });
+        }
+      } catch (e) {
+        console.error("Failed to load app settings", e);
+      }
+  }, []);
+
   const initializeApp = useCallback(async () => {
     setAppState(AppState.LOADING);
     
     await migrationService.migrateAllFromLocalStorage();
+    await loadAppSettings();
 
+    // Cargar los DJs desde la cuenta de Puter del usuario.
     const djs = await djService.getDJs();
     const currentId = await djService.getActiveDJId();
 
     setAllDJs(djs);
 
+    // Si el usuario ya tiene DJs en su cuenta, lo llevamos a la pantalla principal.
+    // Si no, iniciamos el proceso de creación de su primer DJ.
     if (djs.length === 0) {
       setAppState(AppState.ONBOARDING);
     } else {
       setActiveDJId(currentId || djs[0].id);
       setAppState(AppState.HOME);
     }
-  }, []);
+  }, [loadAppSettings]);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -244,6 +303,27 @@ const App: React.FC = () => {
       setAppState(AppState.HOME);
     }
   }, []);
+  
+  const handleSaveSettings = async (settings: AppSettings) => {
+      if (typeof puter === 'undefined' || !puter.kv) {
+          alert("No se pudieron guardar los ajustes. Revisa tu conexión.");
+          return;
+      };
+      try {
+        await puter.kv.set('aiRadioAppSettings', settings);
+        setAppSettings(settings);
+        alert("Ajustes guardados.");
+      } catch(e) {
+        console.error("Failed to save app settings", e);
+        alert("Hubo un error al guardar tus ajustes.");
+      }
+    };
+
+    const handleResetSettings = async () => {
+        if (window.confirm("¿Seguro que quieres restaurar todos los ajustes de la aplicación a sus valores por defecto?")) {
+            await handleSaveSettings(defaultAppSettings);
+        }
+    };
 
   const resetApp = () => {
     setAppState(AppState.HOME);
@@ -291,6 +371,9 @@ const App: React.FC = () => {
             onEditDJ={(dj) => { setDjToEdit(dj); setAppState(AppState.DJ_EDITOR); }}
             onImport={triggerImport}
             onExportAll={handleExportAllData}
+            appSettings={appSettings}
+            onSaveSettings={handleSaveSettings}
+            onResetSettings={handleResetSettings}
         />;
       case AppState.CREATING_SHOW:
         if (!activeDJ) return null;

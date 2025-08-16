@@ -25,7 +25,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onHire, onImport, error }) => {
                 persona: selectedPersona,
                 dna: { humor: 0, energy: 0, knowledge: 0, tone: 0 },
                 voiceLanguage: 'es-ES',
-                voiceEngine: 'neural',
+                voiceEngine: 'generative',
             };
             onHire(newDJ);
         }

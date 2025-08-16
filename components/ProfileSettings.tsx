@@ -1,6 +1,8 @@
-import React, { useState, useRef } from 'react';
-import { ArrowLeft, User, ChevronRight, Edit, BookOpen, Users, Upload, Download, AlertTriangle, Save, LoaderCircle, Camera, Trash2 } from 'lucide-react';
-import { AppState, ResidentDJ } from '../types';
+
+
+import React, { useState, useRef, useEffect } from 'react';
+import { ArrowLeft, User, ChevronRight, Edit, BookOpen, Users, Upload, Download, AlertTriangle, Save, LoaderCircle, Camera, Trash2, SlidersHorizontal, Info, Settings, RefreshCw } from 'lucide-react';
+import { AppState, ResidentDJ, AppSettings, Intention } from '../types';
 import * as userService from '../services/userService';
 import * as migrationService from '../services/migrationService';
 
@@ -16,6 +18,9 @@ interface ProfileSettingsProps {
     onEditDJ: (dj: ResidentDJ) => void;
     onImport: () => void;
     onExportAll: () => void;
+    appSettings: AppSettings;
+    onSaveSettings: (settings: AppSettings) => void;
+    onResetSettings: () => void;
 }
 
 const SettingsCard = ({ children }: { children: React.ReactNode }) => (
@@ -23,6 +28,99 @@ const SettingsCard = ({ children }: { children: React.ReactNode }) => (
         {children}
     </div>
 );
+
+const Toggle = ({ label, checked, onChange, description }: { label: string, checked: boolean, onChange: (c: boolean) => void, description?: string }) => (
+    <div className="flex items-center justify-between py-2">
+        <div>
+            <label className="font-medium text-slate-200">{label}</label>
+            {description && <p className="text-xs text-slate-400 max-w-xs">{description}</p>}
+        </div>
+        <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${checked ? 'bg-purple-600' : 'bg-slate-600'}`}>
+            <span aria-hidden="true" className={`inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
+        </button>
+    </div>
+);
+
+const AppSettingsCard = ({ appSettings, onSaveSettings, onResetSettings }: { appSettings: AppSettings, onSaveSettings: (s: AppSettings) => void, onResetSettings: () => void }) => {
+    const [settings, setSettings] = useState<AppSettings>(appSettings);
+    const [activeTab, setActiveTab] = useState('general');
+
+    useEffect(() => { setSettings(appSettings); }, [appSettings]);
+
+    const handleChange = (key: keyof AppSettings, value: any) => setSettings(prev => ({ ...prev, [key]: value }));
+    const handleSave = () => onSaveSettings(settings);
+
+    const renderGeneral = () => (
+        <div className="space-y-4">
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Idioma</label><select value={settings.appLanguage} onChange={e => handleChange('appLanguage', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="es">Español</option><option value="en" disabled>English (Próximamente)</option></select></div>
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Tema Visual</label><select value={settings.appTheme} onChange={e => handleChange('appTheme', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="dark">Oscuro</option><option value="light" disabled>Claro (Próximamente)</option><option value="system" disabled>Sistema (Próximamente)</option></select></div>
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Intención por Defecto</label><select value={settings.defaultIntention} onChange={e => handleChange('defaultIntention', e.target.value as Intention)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="Automatic">Automático</option><option value="Focus">Enfocarme</option><option value="Relax">Relajarme</option><option value="Celebrate">Celebrar</option><option value="Nostalgia">Nostalgia</option><option value="Discover">Descubrir</option></select></div>
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Vista de Inicio</label><select value={settings.startupView} onChange={e => handleChange('startupView', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="HOME">Estación</option><option value="SOCIAL_HUB">Comunidad</option><option value="DJ_VAULT">Bóveda de DJs</option></select></div>
+            <Toggle label="Activar Analíticas de Uso" checked={settings.enableAnalytics} onChange={c => handleChange('enableAnalytics', c)} description="Ayúdanos a mejorar AI Radio enviando datos de uso anónimos." />
+        </div>
+    );
+    const renderPlayback = () => (
+        <div className="space-y-4">
+             <div><label className="block text-sm font-medium text-slate-300 mb-1">Calidad de Audio</label><select value={settings.audioQuality} onChange={e => handleChange('audioQuality', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="high">Alta</option><option value="medium" disabled>Media (Próximamente)</option><option value="low" disabled>Baja (Próximamente)</option></select></div>
+             <div><label className="block text-sm font-medium text-slate-300">Volumen por Defecto: <span className="font-bold text-purple-300">{Math.round(settings.defaultVolume * 100)}%</span></label><input type="range" min={0} max={1} step={0.01} value={settings.defaultVolume} onChange={e => handleChange('defaultVolume', parseFloat(e.target.value))} className="w-full progress-bar h-2 mt-1"/></div>
+             <div><label className="block text-sm font-medium text-slate-300">Duración de Crossfade Global: <span className="font-bold text-purple-300">{settings.globalCrossfadeDuration.toFixed(1)}s</span></label><input type="range" min={0} max={5} step={0.1} value={settings.globalCrossfadeDuration} onChange={e => handleChange('globalCrossfadeDuration', parseFloat(e.target.value))} className="w-full progress-bar h-2 mt-1"/></div>
+             <Toggle label="Normalización de Audio" checked={settings.enableAudioNormalization} onChange={c => handleChange('enableAudioNormalization', c)} description="Intenta igualar el volumen de todas las canciones."/>
+             <Toggle label="Reproducción sin Pausas" checked={settings.enableGaplessPlayback} onChange={c => handleChange('enableGaplessPlayback', c)} description="Elimina los silencios entre pistas."/>
+             <Toggle label="Precargar Siguiente Canción" checked={settings.preloadNextSong} onChange={c => handleChange('preloadNextSong', c)} description="Mejora la fluidez de las transiciones."/>
+             <Toggle label="Recordar Posición de Reproducción" checked={settings.rememberPlaybackPosition} onChange={c => handleChange('rememberPlaybackPosition', c)} description="Vuelve donde lo dejaste en el último show."/>
+        </div>
+    );
+    const renderInterface = () => (
+        <div className="space-y-4">
+            <Toggle label="Vista Compacta de Librería" checked={settings.compactLibraryView} onChange={c => handleChange('compactLibraryView', c)} description="Muestra más canciones en la misma pantalla."/>
+            <Toggle label="Reducir Movimiento" checked={settings.reduceMotion} onChange={c => handleChange('reduceMotion', c)} description="Desactiva animaciones y efectos visuales."/>
+            <Toggle label="Usar Carátula como Fondo del Reproductor" checked={settings.showAlbumArtAsPlayerBackground} onChange={c => handleChange('showAlbumArtAsPlayerBackground', c)}/>
+            <Toggle label="Mostrar Estado de Reproducibilidad" checked={settings.libraryShowPlayability} onChange={c => handleChange('libraryShowPlayability', c)} description="Muestra qué canciones están activas en la librería."/>
+            <Toggle label="Notificaciones del Diario del DJ" checked={settings.showDJDiaryNotifications} onChange={c => handleChange('showDJDiaryNotifications', c)} description="Recibe un aviso cuando tu DJ escriba algo nuevo."/>
+        </div>
+    );
+    const renderAccessibility = () => (
+        <div className="space-y-4">
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Tamaño de Fuente</label><select value={settings.fontSize} onChange={e => handleChange('fontSize', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="small">Pequeño</option><option value="medium">Mediano</option><option value="large">Grande</option></select></div>
+            <Toggle label="Modo de Alto Contraste" checked={settings.highContrastMode} onChange={c => handleChange('highContrastMode', c)} description="Aumenta el contraste de colores para mejorar la legibilidad."/>
+            <Toggle label="Fuente para Dislexia" checked={settings.dyslexicFriendlyFont} onChange={c => handleChange('dyslexicFriendlyFont', c)} description="Usa una fuente diseñada para facilitar la lectura."/>
+            <Toggle label="Foco de Navegación Mejorado" checked={settings.enhancedFocusRings} onChange={c => handleChange('enhancedFocusRings', c)} description="Hace más visible el elemento seleccionado con el teclado."/>
+            <Toggle label="Controles Más Grandes" checked={settings.useBiggerControls} onChange={c => handleChange('useBiggerControls', c)} description="Aumenta el tamaño de botones y deslizadores."/>
+            <Toggle label="Mostrar Siempre Transcripciones del DJ" checked={settings.alwaysShowDJTranscripts} onChange={c => handleChange('alwaysShowDJTranscripts', c)} description="Muestra los comentarios del DJ como texto en el reproductor."/>
+        </div>
+    );
+    const renderData = () => (
+        <div className="space-y-4">
+            <Toggle label="Pausar Historial de Escucha" checked={settings.pauseListeningHistory} onChange={c => handleChange('pauseListeningHistory', c)} description="Tu actividad no se registrará mientras esté activado."/>
+            <Toggle label="Contenido Basado en Ubicación" checked={settings.enableLocationBasedContent} onChange={c => handleChange('enableLocationBasedContent', c)} description="Permite que la app use tu ubicación para funciones como el tiempo."/>
+            <Toggle label="Anuncios Personalizados" checked={settings.enablePersonalizedAds} onChange={c => handleChange('enablePersonalizedAds', c)} description="Permite a la IA usar tu historial para generar anuncios (falsos) más relevantes."/>
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Auto-eliminar Historial</label><select value={settings.autoDeleteHistory} onChange={e => handleChange('autoDeleteHistory', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="never">Nunca</option><option value="1m">Después de 1 mes</option><option value="3m">Después de 3 meses</option><option value="1y">Después de 1 año</option></select></div>
+            <button className="w-full text-left p-3 rounded-lg flex justify-between items-center bg-red-500/10 text-red-300 hover:bg-red-500/20 transition-colors"><div className="flex items-center gap-3"><Info size={20}/><span>Gestionar historial y datos cacheados</span></div><ChevronRight size={20}/></button>
+        </div>
+    );
+    
+    return (
+        <SettingsCard>
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><Settings size={20} className="text-purple-400"/> Ajustes de la Aplicación</h3>
+            <div className="flex flex-wrap border-b border-slate-700 mb-4">
+                {[{id: 'general', label: 'General'}, {id: 'playback', label: 'Reproducción'}, {id: 'interface', label: 'Interfaz'}, {id: 'accessibility', label: 'Accesibilidad'}, {id: 'data', label: 'Datos'}].map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-4 py-2 text-sm font-semibold transition-colors ${activeTab === tab.id ? 'text-purple-300 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white border-b-2 border-transparent'}`}>{tab.label}</button>
+                ))}
+            </div>
+            <div className="max-h-[40vh] overflow-y-auto pr-2 space-y-4">
+                {activeTab === 'general' && renderGeneral()}
+                {activeTab === 'playback' && renderPlayback()}
+                {activeTab === 'interface' && renderInterface()}
+                {activeTab === 'accessibility' && renderAccessibility()}
+                {activeTab === 'data' && renderData()}
+            </div>
+            <div className="border-t border-slate-700 mt-6 pt-4 flex justify-end gap-3">
+                 <button onClick={onResetSettings} className="flex items-center gap-2 text-sm font-semibold bg-slate-700 hover:bg-slate-600/80 px-3 py-1.5 rounded-lg transition-colors"><RefreshCw size={14}/> Restaurar</button>
+                 <button onClick={handleSave} className="bg-purple-600 font-bold py-2 px-4 rounded-lg hover:bg-purple-500 flex items-center gap-2"><Save size={18}/> Guardar Ajustes</button>
+            </div>
+        </SettingsCard>
+    )
+}
 
 const EditProfileModal = ({ user, setUser, onClose }: { user: any, setUser: (u: any) => void, onClose: () => void }) => {
     const [newUsername, setNewUsername] = useState(user.username);
@@ -138,7 +236,7 @@ const DeleteDataModal = ({ username, onConfirm, onCancel }: { username: string, 
     );
 };
 
-const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onBack, user, setUser, onLogout, activeDJ, setAppState, onEditDJ, onImport, onExportAll }) => {
+const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onBack, user, setUser, onLogout, activeDJ, setAppState, onEditDJ, onImport, onExportAll, appSettings, onSaveSettings, onResetSettings }) => {
     const [isProfileModalOpen, setProfileModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -233,6 +331,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onBack, user, setUser
                 <div className="space-y-6">
                     {renderProfile()}
                     {renderDJSettings()}
+                    <AppSettingsCard appSettings={appSettings} onSaveSettings={onSaveSettings} onResetSettings={onResetSettings} />
                     {renderAccountSettings()}
                 </div>
             </div>

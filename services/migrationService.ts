@@ -1,4 +1,5 @@
 
+
 import { ResidentDJ, LibrarySong, ListeningHistory, DJDiaryEntry, CustomizationOptions, Intention } from '../types';
 import * as djService from './djService';
 import * as libraryService from './libraryService';
@@ -39,7 +40,7 @@ export const migrateAllFromLocalStorage = async (): Promise<void> => {
                 persona: legacyDJ.persona,
                 dna: { humor: 0, energy: 0, knowledge: 0, tone: 0 },
                 voiceLanguage: 'es-ES',
-                voiceEngine: 'neural',
+                voiceEngine: 'generative',
             };
             await djService.saveDJs([newDJ]);
             await djService.setActiveDJId(newDJ.id);

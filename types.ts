@@ -156,13 +156,63 @@ export interface ResidentDJ {
   persona: DJPersona;
   dna: DJDNA;
   voiceLanguage?: string; // e.g., 'es-ES' language code
-  voiceEngine?: 'standard' | 'neural' | 'generative';
+  voiceEngine?: 'generative';
 }
 
 export interface DJDiaryEntry {
     timestamp: string;
     content: string;
     type: 'thought' | 'milestone' | 'analysis';
+}
+
+export interface AppSettings {
+  // General
+  appLanguage: 'es' | 'en';
+  appTheme: 'dark' | 'light' | 'system';
+  defaultIntention: Intention;
+  startupView: 'HOME' | 'SOCIAL_HUB' | 'DJ_VAULT';
+  enableAnalytics: boolean;
+  
+  // Playback & Audio
+  audioQuality: 'low' | 'medium' | 'high';
+  defaultVolume: number; // 0 to 1
+  globalCrossfadeDuration: number; // 0 to 5
+  enableAudioNormalization: boolean;
+  enableGaplessPlayback: boolean;
+  preloadNextSong: boolean;
+  rememberPlaybackPosition: boolean;
+  autoPlayOnStart: boolean;
+  showEndBehavior: 'return' | 'replay' | 'similar';
+  djVoiceVolumeBoost: number; // 0 to 1
+  musicDuckingAggressiveness: number; // 0 to 1
+
+  // Interface & Visuals
+  defaultVisualizerStyle: 'bars' | 'waveform' | 'circle';
+  defaultVisualizerColorPalette: 'neon_purple' | 'fire_ice' | 'emerald_forest' | 'monochrome';
+  reduceMotion: boolean;
+  showAlbumArtAsPlayerBackground: boolean;
+  compactLibraryView: boolean;
+  libraryShowPlayability: boolean;
+  libraryShowDuration: boolean;
+  libraryShowYear: boolean;
+  libraryShowAlbum: boolean;
+  timestampFormat: '24h' | '12h';
+  showDJDiaryNotifications: boolean;
+
+  // Accessibility
+  highContrastMode: boolean;
+  fontSize: 'small' | 'medium' | 'large';
+  dyslexicFriendlyFont: boolean;
+  enhancedFocusRings: boolean;
+  screenReaderVerbosity: 'terse' | 'standard' | 'verbose';
+  alwaysShowDJTranscripts: boolean;
+  useBiggerControls: boolean;
+
+  // Data & Privacy
+  pauseListeningHistory: boolean;
+  autoDeleteHistory: 'never' | '1m' | '3m' | '1y';
+  enableLocationBasedContent: boolean;
+  enablePersonalizedAds: boolean;
 }
 
 
