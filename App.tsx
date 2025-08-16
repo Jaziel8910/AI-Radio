@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { AppState, AnalyzedSong, RadioShow, CustomizationOptions, LibrarySong, ResidentDJ } from './types';
 import { createRadioShow } from './services/geminiService';
@@ -8,7 +9,8 @@ import Player from './components/Player';
 import Onboarding from './components/Onboarding';
 import DJVault from './components/DJVault';
 import DJEditor from './components/DJEditor';
-import { PlayCircle, Users } from 'lucide-react';
+import DJDiary from './components/DJDiary';
+import { PlayCircle, Users, BookUser } from 'lucide-react';
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.LOADING);
@@ -25,13 +27,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const initializeApp = async () => {
-      // Warm up TTS
-      if (window.speechSynthesis && typeof window.speechSynthesis.getVoices === 'function') {
-        const warmUp = () => window.speechSynthesis.getVoices();
-        warmUp();
-        window.speechSynthesis.onvoiceschanged = warmUp;
-      }
-
       // Migrate legacy single DJ if necessary
       await djService.migrateLegacyDJ();
 
@@ -112,7 +107,22 @@ const App: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'ai_radio_djs.json';
+    a.download = 'ai_radio_djs_backup.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportDJ = (djId: string) => {
+    const dj = allDJs.find(d => d.id === djId);
+    if (!dj) return;
+    const jsonString = JSON.stringify(dj, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${dj.name.replace(/\s/g, '_')}_personality.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -155,7 +165,7 @@ const App: React.FC = () => {
       index,
       songId: song.id,
       fileUrl: URL.createObjectURL(song.file),
-      metadata: { title: song.metadata.title, artist: song.metadata.artist, album: song.metadata.album, duration: song.metadata.duration, picture: song.metadata.picture, }
+      metadata: song.metadata
     }));
     setSongsForPlayer(analyzedSongs);
 
@@ -181,25 +191,32 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    if (!activeDJ && ![AppState.LOADING, AppState.ONBOARDING].includes(appState)) {
+        return <Loader text="Cargando tu estación..." />;
+    }
+
     switch (appState) {
       case AppState.ONBOARDING:
         return <Onboarding onHire={handleSaveDJ} error={error} />;
       case AppState.HOME:
-        if (!activeDJ) return <Loader text="Cargando tu estación..." />;
+        if (!activeDJ) return <Loader text="Cargando tu DJ..." />;
         return <Library activeDJ={activeDJ} onCreateShow={handleCreateShow} onManageDJs={() => setAppState(AppState.DJ_VAULT)} error={error} setError={setError} />;
       case AppState.DJ_VAULT:
-        return <DJVault djs={allDJs} activeDJId={activeDJId} onSelect={handleChangeActiveDJ} onEdit={(dj) => { setDjToEdit(dj); setAppState(AppState.DJ_EDITOR); }} onDelete={handleDeleteDJ} onAdd={() => { setDjToEdit(null); setAppState(AppState.DJ_EDITOR); }} onBack={() => setAppState(AppState.HOME)} onClone={handleCloneDJ} onImport={handleImportDJs} onExport={handleExportDJs} />;
+        return <DJVault djs={allDJs} activeDJId={activeDJId} onSelect={handleChangeActiveDJ} onEdit={(dj) => { setDjToEdit(dj); setAppState(AppState.DJ_EDITOR); }} onDelete={handleDeleteDJ} onAdd={() => { setDjToEdit(null); setAppState(AppState.DJ_EDITOR); }} onBack={() => setAppState(AppState.HOME)} onClone={handleCloneDJ} onImport={handleImportDJs} onExportAll={handleExportDJs} onExportSingle={handleExportDJ} />;
       case AppState.DJ_EDITOR:
         return <DJEditor dj={djToEdit} onSave={handleSaveDJ} onBack={() => setAppState(AppState.DJ_VAULT)} />;
+      case AppState.DJ_DIARY:
+        if (!activeDJ) return null;
+        return <DJDiary dj={activeDJ} onBack={() => setAppState(AppState.HOME)} />;
       case AppState.CREATING_SHOW:
         if (!activeDJ) return null;
         return <Loader text={`${activeDJ.name} está buscando datos, escribiendo guiones y preparando la sesión...`} />;
       case AppState.SHOW_READY:
       case AppState.PLAYING:
-        if (!radioShow || songsForPlayer.length === 0 || !currentOptions) {
+        if (!radioShow || songsForPlayer.length === 0 || !currentOptions || !activeDJ) {
           setError("No se pudo cargar la sesión. Por favor, reinicia."); setAppState(AppState.HOME); return null;
         }
-        return <Player show={radioShow} songs={songsForPlayer} options={currentOptions} setAppState={setAppState} onClose={resetApp} />;
+        return <Player show={radioShow} songs={songsForPlayer} options={currentOptions} dj={activeDJ} setAppState={setAppState} onClose={resetApp} />;
       case AppState.LOADING:
         return <Loader text="Iniciando AI Radio..." />;
       default:
@@ -213,7 +230,8 @@ const App: React.FC = () => {
     switch (appState) {
         case AppState.HOME: return activeDJ ? `La Estación de ${activeDJ.name}` : 'AI Radio';
         case AppState.DJ_VAULT: return 'La Bóveda de DJs';
-        case AppState.DJ_EDITOR: return djToEdit ? `Editando a ${djToEdit.name}` : 'Creando Nuevo DJ';
+        case AppState.DJ_EDITOR: return djToEdit ? `Editando a ${djToEdit.name}` : 'El Laboratorio de Creación';
+        case AppState.DJ_DIARY: return `El Diario de ${activeDJ?.name}`;
         default: return 'AI Radio';
     }
   }
@@ -227,7 +245,12 @@ const App: React.FC = () => {
               <PlayCircle className="w-8 h-8 text-purple-400" />
               <h1 className="text-2xl font-black tracking-wider text-white uppercase">{getHeaderTitle()}</h1>
             </div>
-             {appState === AppState.HOME && <button onClick={() => setAppState(AppState.DJ_VAULT)} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><Users size={16}/> Gestionar DJs</button>}
+             {appState === AppState.HOME && activeDJ && (
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setAppState(AppState.DJ_DIARY)} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><BookUser size={16}/> El Diario del DJ</button>
+                    <button onClick={() => setAppState(AppState.DJ_VAULT)} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><Users size={16}/> Cabina de Mando</button>
+                </div>
+             )}
           </header>
         )}
         <main className={!isPlayerActive ? 'mt-4' : ''}>{renderContent()}</main>

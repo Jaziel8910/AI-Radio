@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { CustomizationOptions, LibrarySong, ResidentDJ, Intention, TimeOfDay } from '../types';
 import { INTENTION_CONFIGS } from '../constants';
@@ -40,7 +41,6 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
     const getInitialOptions = (): CustomizationOptions => {
         const baseOptions = INTENTION_CONFIGS[intention];
         return {
-            djVoiceURI: dj.voiceURI, speechRate: dj.speechRate, speechPitch: dj.speechPitch,
             intention: intention,
             theme: baseOptions.theme || '',
             showContext: baseOptions.showContext || `Una sesión de ${songs.length} canciones con la intención de '${intention}'.`,

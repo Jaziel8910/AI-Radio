@@ -1,12 +1,81 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { AnalyzedSong, ResidentDJ, RadioShow, CustomizationOptions, Source, TimeOfDay, LibrarySong, SongMetadata, DJDNA, Intention } from '../types';
-import { getHistorySummaryForPrompt } from "./historyService";
+import * as historyService from "./historyService";
+import * as libraryService from "./libraryService";
 
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set");
 }
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// Moved from historyService to break circular dependency
+export const getHistorySummaryForPrompt = async (): Promise<string> => {
+    const history = historyService.getHistory();
+    const library = await libraryService.getAllSongs();
+    
+    if (Object.keys(history).length === 0) {
+        return "El usuario es nuevo, no hay historial de escucha. ¡Haz que su primera experiencia sea genial!";
+    }
+
+    const libraryMap = new Map(library.map(song => [song.id, song.metadata]));
+
+    const allSongHistories = Object.entries(history).map(([songId, songHistory]) => ({
+      songId,
+      metadata: libraryMap.get(songId),
+      ...songHistory
+    })).filter(s => s.metadata); // Filter out songs no longer in library
+
+    const globalFavorited = allSongHistories.sort((a,b) => b.favoriteCount - a.favoriteCount).slice(0, 5).filter(s => s.favoriteCount > 0);
+    const globalSkipped = allSongHistories.sort((a,b) => b.skipCount - a.skipCount).slice(0, 5).filter(s => s.skipCount > 2);
+    const globalDisliked = allSongHistories.sort((a,b) => b.dislikeCount - a.dislikeCount).slice(0, 5).filter(s => s.dislikeCount > 0);
+    
+    let summary = "Aquí tienes un resumen de la relación que tienes con este oyente. Úsalo para personalizar tus comentarios y demostrar que le conoces:\n";
+    
+    const formatSong = (s: typeof globalFavorited[0]) => `- "${s.metadata?.title}" por ${s.metadata?.artist}`;
+
+    if(globalFavorited.length > 0) {
+      summary += `\n**Canciones Favoritas de Siempre:** El oyente ADORA estas canciones. Si alguna de ellas está en la sesión de hoy, celébralo por todo lo alto. Son aciertos seguros.\n${globalFavorited.map(formatSong).join('\n')}\n`;
+    }
+    if(globalDisliked.length > 0) {
+      summary += `\n**Canciones en la Lista Negra:** El oyente ha marcado explícitamente que NO le gustan estas. Reconoce si pones una, quizás en tono de broma.\n${globalDisliked.map(formatSong).join('\n')}\n`;
+    }
+     if(globalSkipped.length > 0) {
+      summary += `\n**Canciones que Suele Saltar:** El oyente tiene una relación complicada con estas. Si pones una, puedes mencionarlo de forma juguetona, como "¿Le damos otra oportunidad a esta?"\n${globalSkipped.map(formatSong).join('\n')}\n`;
+    }
+    
+    if (summary.length < 200) {
+      return "El usuario es un oyente recurrente, pero no hay un historial destacable. Basa tus comentarios en el mood actual y sé genial."
+    }
+
+    return summary.trim();
+};
+
+export const createDiaryEntry = async (dj: ResidentDJ, songs: AnalyzedSong[], historySummary: string): Promise<string | null> => {
+    const songList = songs.map(s => `"${s.metadata.title}" by ${s.metadata.artist}`).join(', ');
+    const prompt = `
+        Eres ${dj.name}, el DJ de radio personal del usuario. Acabas de terminar una sesión de radio para él/ella que incluía estas canciones: ${songList}.
+        Basándote en el historial de escucha completo del usuario (proporcionado abajo), escribe una entrada corta y personal para tu diario (2-3 frases) reflexionando sobre lo que aprendiste del gusto del usuario DURANTE ESTA SESIÓN ESPECÍFICA.
+        Habla en primera persona (ej: "Hoy me di cuenta de..."). Sé perspicaz y un poco informal, como si escribieras en un diario privado.
+        ¿Le gustó una canción que pensabas que se saltaría? ¿Se saltó algo que creías que era una apuesta segura? Conecta los puntos.
+
+        HISTORIAL DE ESCUCHA DEL USUARIO:
+        ${historySummary}
+
+        Tu entrada de diario:
+    `;
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt
+        });
+        return response.text.trim();
+    } catch (e) {
+        console.error("Error creating diary entry:", e);
+        return null;
+    }
+};
 
 async function generateShowArt(title: string, theme: string, negativePrompt: string): Promise<string | undefined> {
     try {
@@ -177,7 +246,7 @@ const getIntentionPrompt = (intention: Intention): string => {
 export const createRadioShow = async (songs: AnalyzedSong[], dj: ResidentDJ, options: CustomizationOptions): Promise<RadioShow> => {
   const songListForPrompt = songs.map(s => `${s.index}: "${s.metadata.title}" por ${s.metadata.artist}`).join('\n');
   const finalTimeOfDay = options.timeOfDay === 'auto' ? getTimeOfDay() : options.timeOfDay;
-  const historySummary = getHistorySummaryForPrompt();
+  const historySummary = await getHistorySummaryForPrompt();
   const personaPrompt = generatePersonaFromDNA(dj);
 
   const contextInstructions = [

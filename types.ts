@@ -25,13 +25,7 @@ export interface AnalyzedSong {
   index: number;
   songId: string; // Unique identifier for history tracking
   fileUrl: string;
-  metadata: {
-    title: string;
-    artist: string;
-    album: string;
-    duration: number;
-    picture?: string; // base64 encoded image
-  };
+  metadata: SongMetadata;
 }
 
 export type TimeOfDay = 'auto' | 'madrugada' | 'mañana' | 'tarde' | 'noche';
@@ -48,11 +42,6 @@ export type ListeningHistory = Record<string, SongHistory>;
 
 
 export interface CustomizationOptions {
-  // DJ & Voice (These are now mostly for the SHOW, not the DJ's core identity)
-  djVoiceURI: string; // This will be set from the active DJ
-  speechRate: number; 
-  speechPitch: number; 
-  
   // Show Content
   intention: Intention;
   theme: string;
@@ -140,10 +129,16 @@ export interface ResidentDJ {
   name: string;
   persona: DJPersona;
   dna: DJDNA;
-  voiceURI: string;
-  speechRate: number;
-  speechPitch: number;
+  voiceLanguage?: string; // e.g., 'es-ES' language code
+  voiceEngine?: 'standard' | 'neural' | 'generative';
 }
+
+export interface DJDiaryEntry {
+    timestamp: string;
+    content: string;
+    type: 'thought' | 'milestone' | 'analysis';
+}
+
 
 export enum AppState {
   LOADING = 'LOADING',
@@ -151,6 +146,7 @@ export enum AppState {
   HOME = 'HOME',
   DJ_VAULT = 'DJ_VAULT',
   DJ_EDITOR = 'DJ_EDITOR',
+  DJ_DIARY = 'DJ_DIARY',
   CREATING_SHOW = 'CREATING_SHOW',
   SHOW_READY = 'SHOW_READY',
   PLAYING = 'PLAYING',

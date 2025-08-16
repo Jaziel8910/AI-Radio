@@ -1,3 +1,4 @@
+
 import { DJPersona, Intention, CustomizationOptions } from './types';
 import { Zap, Brain, Heart, Wind, Star, Radio } from 'lucide-react';
 
@@ -34,6 +35,16 @@ export type Palette = {
   shadow: string;
   stroke?: string;
 };
+
+export const PUTER_LANGUAGES = [
+    { code: 'es-ES', name: 'Español (España)' },
+    { code: 'es-MX', name: 'Español (México)' },
+    { code: 'es-US', name: 'Español (EE.UU.)' },
+    { code: 'en-US', name: 'Inglés (EE.UU.)' },
+    { code: 'fr-FR', name: 'Francés (Francia)' },
+    { code: 'de-DE', name: 'Alemán (Alemania)' },
+    { code: 'it-IT', name: 'Italiano (Italia)' },
+];
 
 export const VISUALIZER_PALETTES: Record<string, Palette> = {
   neon_purple: {

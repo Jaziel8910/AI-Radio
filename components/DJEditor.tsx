@@ -1,7 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
 import { ResidentDJ, DJPersona, DJDNA } from '../types';
-import { DJ_PERSONAS } from '../constants';
-import { User, Mic, Save, ArrowLeft, BrainCircuit, Heart, Zap, Annoyed, Volume2, FastForward, GitCommitHorizontal } from 'lucide-react';
+import { DJ_PERSONAS, PUTER_LANGUAGES } from '../constants';
+import { User, Mic, Save, ArrowLeft, BrainCircuit, Heart, Zap, Annoyed, Volume2, FastForward, GitCommitHorizontal, Bot, LoaderCircle } from 'lucide-react';
+
+declare var puter: any;
 
 interface DJEditorProps {
     dj: ResidentDJ | null;
@@ -32,27 +35,60 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
     const [name, setName] = useState(dj?.name || '');
     const [selectedPersona, setSelectedPersona] = useState<DJPersona>(dj?.persona || DJ_PERSONAS[0]);
     const [dna, setDna] = useState<DJDNA>(dj?.dna || { humor: 0, energy: 0, knowledge: 0, tone: 0 });
-    const [voiceURI, setVoiceURI] = useState(dj?.voiceURI || '');
-    const [speechRate, setSpeechRate] = useState(dj?.speechRate || 1);
-    const [speechPitch, setSpeechPitch] = useState(dj?.speechPitch || 1);
-    const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-
-    useEffect(() => {
-        const loadVoices = () => {
-            const availableVoices = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('es-'));
-            setVoices(availableVoices);
-            if (availableVoices.length > 0 && !voiceURI) {
-                setVoiceURI(availableVoices[0].voiceURI);
-            }
-        };
-        loadVoices();
-        window.speechSynthesis.onvoiceschanged = loadVoices;
-    }, [voiceURI]);
-
+    
+    const [voiceEngine, setVoiceEngine] = useState(dj?.voiceEngine || 'neural');
+    const [voiceLanguage, setVoiceLanguage] = useState(dj?.voiceLanguage || 'es-ES');
+    const [isTestingVoice, setIsTestingVoice] = useState(false);
 
     const handleDnaChange = (field: keyof DJDNA, value: number) => {
         setDna(prev => ({ ...prev, [field]: value }));
     };
+
+    const testVoice = async () => {
+        if (typeof puter === 'undefined' || !puter.ai || !puter.ai.txt2speech) {
+            alert("Puter.js no está disponible. Asegúrate de que estás conectado a internet y que el script se ha cargado correctamente.");
+            return;
+        }
+        setIsTestingVoice(true);
+        try {
+            const djName = name.trim() || "tu DJ";
+            const text = `Hola, soy ${djName} y estoy probando mi nueva voz en AI Radio.`;
+            const audio = await puter.ai.txt2speech(text, {
+                language: voiceLanguage,
+                engine: voiceEngine,
+            });
+    
+            // Wrap playback in a promise to await its completion
+            await new Promise<void>((resolve, reject) => {
+                audio.onended = () => resolve();
+                audio.onerror = () => reject(new Error("Error al reproducir el archivo de audio."));
+                audio.play().catch(reject);
+            });
+    
+        } catch (err) {
+            let errorDetails = "Ocurrió un error desconocido.";
+            
+            if (err instanceof Error) {
+                errorDetails = err.message;
+            } else if (typeof err === 'object' && err !== null) {
+                errorDetails = JSON.stringify(err);
+            } else {
+                errorDetails = String(err);
+            }
+            
+            console.error("Error al probar la voz:", err);
+            
+            let userMessage = `No se pudo generar la muestra de voz.\nDetalles: ${errorDetails}`;
+            if (errorDetails.toLowerCase().includes('failed to fetch')) {
+                userMessage += "\n\nEste error ('Failed to fetch') suele indicar un problema de red o permisos (CORS). Asegúrate de tener conexión a internet y que la aplicación se ejecuta en un entorno compatible (como Puter OS).";
+            }
+            
+            alert(userMessage);
+        } finally {
+            setIsTestingVoice(false);
+        }
+    };
+
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -63,9 +99,8 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
             name: name.trim(),
             persona: selectedPersona,
             dna,
-            voiceURI,
-            speechRate,
-            speechPitch
+            voiceLanguage,
+            voiceEngine,
         };
         onSave(savedDJ);
     };
@@ -98,24 +133,33 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
                 <div className="space-y-4 pt-4 border-t border-slate-700">
                     <h3 className="font-semibold text-lg text-center">ADN de Personalidad</h3>
                     <DNASlider label="Humor" value={dna.humor} onChange={v => handleDnaChange('humor', v)} minLabel="Sutil" maxLabel="Sarcástico" icon={Annoyed} />
-                    <DNASlider label="Energía" value={dna.energy} onChange={v => handleDnaChange('energy', v)} minLabel="Relajado" maxLabel="Extremo" icon={Zap} />
-                    <DNASlider label="Profundidad" value={dna.knowledge} onChange={v => handleDnaChange('knowledge', v)} minLabel="Superficial" maxLabel="Erudito" icon={BrainCircuit} />
+                    <DNASlider label="Energía" value={dna.energy} onChange={v => handleDnaChange('energy', v)} minLabel="Chill" maxLabel="Extremo" icon={Zap} />
+                    <DNASlider label="Nivel de Sabelotodo" value={dna.knowledge} onChange={v => handleDnaChange('knowledge', v)} minLabel="Cero Datos" maxLabel="Enciclopedia" icon={BrainCircuit} />
                     <DNASlider label="Tono" value={dna.tone} onChange={v => handleDnaChange('tone', v)} minLabel="Amistoso" maxLabel="Provocador" icon={Heart} />
                 </div>
 
                  <div className="space-y-4 pt-4 border-t border-slate-700">
-                    <h3 className="font-semibold text-lg text-center">Ajustes de Voz</h3>
-                     <div>
-                        <label htmlFor="dj-voice" className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2"><Volume2 size={16} className="text-purple-400"/> Voz del DJ</label>
-                        <div className="relative">
-                            <select id="dj-voice" value={voiceURI} onChange={(e) => setVoiceURI(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3 appearance-none" disabled={voices.length === 0}>
-                                {voices.length === 0 && <option>Cargando voces...</option>}
-                                {voices.map(v => ( <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>))}
+                    <h3 className="font-semibold text-lg text-center">Ajustes de Voz (IA)</h3>
+                     <p className="text-xs text-slate-400 bg-slate-900/50 p-3 rounded-md flex items-center gap-2"><Bot size={28}/>El motor Puter.js ofrece voces de IA de alta calidad.</p>
+                     <div className="flex gap-2 items-end">
+                        <div className="flex-grow">
+                            <label htmlFor="puter-voice" className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2"><Volume2 size={16} className="text-purple-400"/> Idioma y Región</label>
+                            <select id="puter-voice" value={voiceLanguage} onChange={(e) => setVoiceLanguage(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3 appearance-none">
+                                {PUTER_LANGUAGES.map(lang => (<option key={lang.code} value={lang.code}>{lang.name}</option>))}
                             </select>
                         </div>
-                    </div>
-                    <DNASlider label={`Velocidad: ${speechRate.toFixed(1)}x`} value={speechRate} onChange={setSpeechRate} minLabel="Lento" maxLabel="Rápido" icon={FastForward} min={0.5} max={2} step={0.1}/>
-                    <DNASlider label={`Tono: ${speechPitch.toFixed(1)}`} value={speechPitch} onChange={setSpeechPitch} minLabel="Grave" maxLabel="Agudo" icon={GitCommitHorizontal} min={0} max={2} step={0.1}/>
+                        <button type="button" onClick={testVoice} disabled={isTestingVoice} className="bg-slate-700 h-12 px-4 rounded-lg hover:bg-slate-600 flex items-center justify-center disabled:bg-slate-800 disabled:cursor-wait">
+                            {isTestingVoice ? <LoaderCircle size={20} className="animate-spin" /> : 'Probar'}
+                        </button>
+                     </div>
+                     <div>
+                        <label htmlFor="puter-engine" className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2"><BrainCircuit size={16} className="text-purple-400"/> Calidad del Motor</label>
+                        <select id="puter-engine" value={voiceEngine} onChange={(e) => setVoiceEngine(e.target.value as any)} className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3 appearance-none">
+                            <option value="standard">Estándar</option>
+                            <option value="neural">Neural (Recomendado)</option>
+                            <option value="generative">Generativo (Experimental)</option>
+                        </select>
+                     </div>
                 </div>
 
 

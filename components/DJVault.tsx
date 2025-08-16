@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ResidentDJ } from '../types';
 import { User, Trash2, Edit, CheckCircle, PlusCircle, ArrowLeft, Copy, Upload, Download } from 'lucide-react';
@@ -12,7 +13,8 @@ interface DJVaultProps {
     onAdd: () => void;
     onBack: () => void;
     onImport: (djs: ResidentDJ[]) => void;
-    onExport: () => void;
+    onExportAll: () => void;
+    onExportSingle: (djId: string) => void;
 }
 
 const DNABar = ({ value, label, colorClass }: { value: number, label: string, colorClass: string }) => {
@@ -27,7 +29,7 @@ const DNABar = ({ value, label, colorClass }: { value: number, label: string, co
     )
 };
 
-const DJCard: React.FC<{ dj: ResidentDJ, isActive: boolean, onSelect: () => void, onEdit: () => void, onDelete: () => void, onClone: () => void }> = ({ dj, isActive, onSelect, onEdit, onDelete, onClone }) => {
+const DJCard: React.FC<{ dj: ResidentDJ, isActive: boolean, onSelect: () => void, onEdit: () => void, onDelete: () => void, onClone: () => void, onExport: () => void }> = ({ dj, isActive, onSelect, onEdit, onDelete, onClone, onExport }) => {
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (window.confirm(`¿Seguro que quieres borrar a ${dj.name}? Esta acción no se puede deshacer.`)) {
@@ -36,6 +38,7 @@ const DJCard: React.FC<{ dj: ResidentDJ, isActive: boolean, onSelect: () => void
     }
     const handleClone = (e: React.MouseEvent) => { e.stopPropagation(); onClone(); }
     const handleEdit = (e: React.MouseEvent) => { e.stopPropagation(); onEdit(); }
+    const handleExport = (e: React.MouseEvent) => { e.stopPropagation(); onExport(); }
     
     return (
         <div className={`bg-slate-800/70 rounded-2xl p-5 border-2 transition-all flex flex-col ${isActive ? 'border-purple-500 shadow-lg shadow-purple-500/10' : 'border-slate-700 hover:border-slate-600'}`}>
@@ -58,6 +61,7 @@ const DJCard: React.FC<{ dj: ResidentDJ, isActive: boolean, onSelect: () => void
                 <button onClick={onSelect} disabled={isActive} className="w-full bg-purple-600 font-semibold py-2 rounded-lg hover:bg-purple-500 disabled:bg-slate-600 disabled:cursor-not-allowed">Seleccionar</button>
                 <button onClick={handleEdit} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg" aria-label="Editar DJ"><Edit size={20}/></button>
                 <button onClick={handleClone} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg" aria-label="Clonar DJ"><Copy size={20}/></button>
+                <button onClick={handleExport} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg" aria-label="Exportar DJ"><Download size={20}/></button>
                 <button onClick={handleDelete} className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-300 rounded-lg" aria-label="Borrar DJ"><Trash2 size={20}/></button>
             </div>
         </div>
@@ -65,7 +69,7 @@ const DJCard: React.FC<{ dj: ResidentDJ, isActive: boolean, onSelect: () => void
 };
 
 
-const DJVault: React.FC<DJVaultProps> = ({ djs, activeDJId, onSelect, onEdit, onDelete, onClone, onAdd, onBack, onImport, onExport }) => {
+const DJVault: React.FC<DJVaultProps> = ({ djs, activeDJId, onSelect, onEdit, onDelete, onClone, onAdd, onBack, onImport, onExportAll, onExportSingle }) => {
     
     const handleImportClick = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
@@ -78,9 +82,15 @@ const DJVault: React.FC<DJVaultProps> = ({ djs, activeDJId, onSelect, onEdit, on
         if (!file) return;
         try {
             const text = await file.text();
-            const importedDJs = JSON.parse(text);
-            if (Array.isArray(importedDJs) && importedDJs.every(dj => dj.id && dj.name && dj.persona && dj.dna)) {
-                onImport(importedDJs);
+            let importedData = JSON.parse(text);
+            
+            // Normalize single DJ object to an array
+            if (!Array.isArray(importedData)) {
+                importedData = [importedData];
+            }
+            
+            if (Array.isArray(importedData) && importedData.every(dj => dj.id && dj.name && dj.persona && dj.dna)) {
+                onImport(importedData);
             } else {
                 alert('Archivo de importación inválido. Asegúrate de que es un archivo JSON exportado desde AI Radio.');
             }
@@ -96,7 +106,7 @@ const DJVault: React.FC<DJVaultProps> = ({ djs, activeDJId, onSelect, onEdit, on
             <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
                 <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><ArrowLeft size={16}/> Volver a la Estación</button>
                 <div className="flex gap-2">
-                    <button onClick={onExport} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><Download size={16}/> Exportar</button>
+                    <button onClick={onExportAll} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><Download size={16}/> Exportar Todo</button>
                     <button onClick={handleImportClick} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><Upload size={16}/> Importar</button>
                     <input type="file" id="dj-import-input" accept=".json" className="hidden" onChange={handleFileImport} />
                 </div>
@@ -111,6 +121,7 @@ const DJVault: React.FC<DJVaultProps> = ({ djs, activeDJId, onSelect, onEdit, on
                         onEdit={() => onEdit(dj)}
                         onDelete={() => onDelete(dj.id)}
                         onClone={() => onClone(dj.id)}
+                        onExport={() => onExportSingle(dj.id)}
                     />
                 ))}
                  <button onClick={onAdd} className="border-2 border-dashed border-slate-600 rounded-2xl flex flex-col items-center justify-center text-slate-400 hover:bg-slate-800/50 hover:border-slate-500 transition-all min-h-[280px]">

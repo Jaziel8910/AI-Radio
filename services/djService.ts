@@ -1,3 +1,4 @@
+
 import { ResidentDJ, DJPersona } from '../types';
 
 const DJS_KEY = 'aiRadioDJs';
@@ -55,9 +56,8 @@ export const migrateLegacyDJ = async (): Promise<void> => {
                 ...legacyDJ,
                 id: crypto.randomUUID(),
                 dna: { humor: 0, energy: 0, knowledge: 0, tone: 0 },
-                voiceURI: '',
-                speechRate: 1,
-                speechPitch: 1,
+                voiceLanguage: 'es-ES',
+                voiceEngine: 'neural',
             };
 
             saveDJs([newDJ]);

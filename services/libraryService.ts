@@ -1,9 +1,10 @@
 
 
-import { LibrarySong } from '../types';
+import { LibrarySong, SongMetadata } from '../types';
 import { extractMetadataFromFile } from './audioService';
 import { getSongId } from './historyService';
 import { enhanceSongsMetadata } from './geminiService';
+import * as auddService from './auddService';
 
 const DB_NAME = 'AIRadioDB';
 const DB_VERSION = 1;
@@ -33,6 +34,14 @@ function openDB(): Promise<IDBDatabase> {
     };
   });
 }
+
+const isMetadataWeak = (metadata: SongMetadata, file: File): boolean => {
+    if (metadata.artist === 'Artista Desconocido') return true;
+    const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+    if (metadata.title === fileNameWithoutExt || metadata.title === file.name) return true;
+    return false;
+};
+
 
 export async function addSongs(files: File[]): Promise<void> {
     const db = await openDB();
@@ -65,20 +74,36 @@ export async function addSongs(files: File[]): Promise<void> {
     }
 
     // 3a: Extract basic metadata.
-    const songsWithBasicMeta: LibrarySong[] = await Promise.all(
+    let songsWithInitialMeta: LibrarySong[] = await Promise.all(
         newSongsToProcess.map(async ({ id, file }) => {
             const metadata = await extractMetadataFromFile(file);
             return { id, file, metadata };
         })
     );
 
-    // 3b: Enhance with AI. This is the slow part.
+    // 3b: Enhance with AudD.io if metadata is weak
+    songsWithInitialMeta = await Promise.all(
+        songsWithInitialMeta.map(async (song) => {
+            if (isMetadataWeak(song.metadata, song.file)) {
+                console.log(`Weak metadata for "${song.file.name}", trying AudD.io...`);
+                const auddData = await auddService.identifySong(song.file);
+                if (auddData) {
+                    console.log(`AudD.io found a match for "${song.file.name}":`, auddData);
+                    return { ...song, metadata: { ...song.metadata, ...auddData } };
+                }
+            }
+            return song;
+        })
+    );
+
+
+    // 3c: Enhance with AI (Gemini). This is the slow part.
     let songsToAdd: LibrarySong[];
     try {
-        songsToAdd = await enhanceSongsMetadata(songsWithBasicMeta);
+        songsToAdd = await enhanceSongsMetadata(songsWithInitialMeta);
     } catch (e) {
         console.error("AI Metadata enhancement failed. Storing songs with basic metadata.", e);
-        songsToAdd = songsWithBasicMeta; // Fallback to basic metadata on error
+        songsToAdd = songsWithInitialMeta; // Fallback to basic metadata on error
     }
 
     // Step 4: Add the processed songs in a single write transaction.

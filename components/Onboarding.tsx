@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { DJ_PERSONAS } from '../constants';
 import { DJPersona, ResidentDJ } from '../types';
@@ -11,21 +12,6 @@ interface OnboardingProps {
 const Onboarding: React.FC<OnboardingProps> = ({ onHire, error }) => {
     const [name, setName] = useState('');
     const [selectedPersona, setSelectedPersona] = useState<DJPersona>(DJ_PERSONAS[0]);
-    const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-    const [voiceURI, setVoiceURI] = useState('');
-
-    useEffect(() => {
-        const loadVoices = () => {
-            const availableVoices = window.speechSynthesis.getVoices().filter(v => v.lang.startsWith('es-'));
-            setVoices(availableVoices);
-            if (availableVoices.length > 0 && !voiceURI) {
-                setVoiceURI(availableVoices[0].voiceURI);
-            }
-        };
-        loadVoices();
-        window.speechSynthesis.onvoiceschanged = loadVoices;
-    }, [voiceURI]);
-
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -35,9 +21,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onHire, error }) => {
                 name: name.trim(),
                 persona: selectedPersona,
                 dna: { humor: 0, energy: 0, knowledge: 0, tone: 0 },
-                voiceURI,
-                speechRate: 1,
-                speechPitch: 1,
+                voiceLanguage: 'es-ES',
+                voiceEngine: 'neural',
             };
             onHire(newDJ);
         }
@@ -87,25 +72,6 @@ const Onboarding: React.FC<OnboardingProps> = ({ onHire, error }) => {
                         </select>
                     </div>
                     <p className="text-xs text-slate-400 bg-slate-900/50 p-3 rounded-md mt-3">{selectedPersona.style}</p>
-                </div>
-
-                <div>
-                    <label htmlFor="dj-voice" className="block text-sm font-medium text-slate-300 mb-2">3. Elige su voz</label>
-                    <div className="relative">
-                        <Volume2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                         <select
-                            id="dj-voice"
-                            value={voiceURI}
-                            onChange={(e) => setVoiceURI(e.target.value)}
-                            className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3 pl-10 appearance-none"
-                            disabled={voices.length === 0}
-                        >
-                            {voices.length === 0 && <option>Cargando voces...</option>}
-                            {voices.map(v => (
-                                <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>
-                            ))}
-                        </select>
-                    </div>
                 </div>
                 
                 {error && <p className="bg-red-500/10 text-red-400 text-center text-sm p-3 rounded-lg border border-red-500/20">{error}</p>}
