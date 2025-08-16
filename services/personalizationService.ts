@@ -1,10 +1,16 @@
 
+
 import { CustomizationOptions, Intention } from '../types';
 
+declare var puter: any;
+
 const PREFS_KEY_PREFIX = 'aiRadioUserPrefs_';
+const isPuterReady = () => typeof puter !== 'undefined' && puter.kv;
+
 
 // Guarda las preferencias del usuario para una intención específica
-export const saveUserPreferences = (intention: Intention, options: CustomizationOptions): void => {
+export const saveUserPreferences = async (intention: Intention, options: CustomizationOptions): Promise<void> => {
+  if (!isPuterReady()) return;
   try {
     const key = `${PREFS_KEY_PREFIX}${intention}`;
     // Crea una copia para modificar
@@ -13,32 +19,32 @@ export const saveUserPreferences = (intention: Intention, options: Customization
     delete (prefsToSave as Partial<CustomizationOptions>).intention;
     delete (prefsToSave as Partial<CustomizationOptions>).showContext;
     
-    localStorage.setItem(key, JSON.stringify(prefsToSave));
+    await puter.kv.set(key, prefsToSave);
   } catch (error) {
-    console.error("Error al guardar las preferencias del usuario en localStorage:", error);
+    console.error("Error al guardar las preferencias del usuario en Puter KV:", error);
   }
 };
 
 // Recupera las preferencias del usuario para una intención específica (función interna)
-const getUserPreferences = (intention: Intention): CustomizationOptions | null => {
+const getUserPreferences = async (intention: Intention): Promise<CustomizationOptions | null> => {
+  if (!isPuterReady()) return null;
   try {
     const key = `${PREFS_KEY_PREFIX}${intention}`;
-    const storedPrefs = localStorage.getItem(key);
+    const storedPrefs = await puter.kv.get(key);
     if (storedPrefs) {
-      const parsed = JSON.parse(storedPrefs);
-      return { ...parsed, intention };
+      return { ...storedPrefs, intention };
     }
     return null;
   } catch (error) {
-    console.error("Error al leer las preferencias del usuario de localStorage:", error);
+    console.error("Error al leer las preferencias del usuario de Puter KV:", error);
     return null;
   }
 };
 
 
 // Recupera y ajusta inteligentemente las preferencias del usuario
-export const getAutomatedOptions = (intention: Intention): CustomizationOptions | null => {
-    const savedPrefs = getUserPreferences(intention);
+export const getAutomatedOptions = async (intention: Intention): Promise<CustomizationOptions | null> => {
+    const savedPrefs = await getUserPreferences(intention);
     if (!savedPrefs) return null;
 
     // Empezamos con las preferencias guardadas

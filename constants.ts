@@ -216,6 +216,7 @@ export const INTENTION_CONFIGS: Record<Intention, Omit<Partial<CustomizationOpti
     theme: "Una selección musical sorpresa, adaptada a ti y a este momento del día.",
     mood: { energy: 0.1, vibe: 0.2 },
     commentaryLength: 'standard',
+    contextualEventsLevel: 'subtle',
   },
   Focus: {
     theme: "Música para máxima concentración y productividad.",
@@ -225,6 +226,7 @@ export const INTENTION_CONFIGS: Record<Intention, Omit<Partial<CustomizationOpti
     includeJingles: false,
     showContext: 'Sesión de trabajo o estudio profundo.',
     languageStyle: 'formal',
+    contextualEventsLevel: 'none',
   },
   Relax: {
     theme: "Una sesión tranquila para relajarse y desconectar.",
@@ -232,6 +234,7 @@ export const INTENTION_CONFIGS: Record<Intention, Omit<Partial<CustomizationOpti
     commentaryLength: 'standard',
     languageStyle: 'poetic',
     crossfadeDuration: 3,
+    contextualEventsLevel: 'subtle',
   },
   Celebrate: {
     theme: "¡Esto es una fiesta! La mejor música para celebrar y pasarlo bien.",
@@ -239,17 +242,20 @@ export const INTENTION_CONFIGS: Record<Intention, Omit<Partial<CustomizationOpti
     commentaryLength: 'standard',
     languageStyle: 'colloquial',
     includeCallIns: true,
+    contextualEventsLevel: 'immersive',
   },
   Nostalgia: {
     theme: "Un viaje sonoro al pasado.",
     mood: { energy: -0.2, vibe: -0.4 },
     commentaryLength: 'long',
     timeCapsuleYear: '',
+    contextualEventsLevel: 'subtle',
   },
   Discover: {
     theme: "Explorando los tesoros menos escuchados de tu librería.",
     mood: { energy: 0.3, vibe: 0.4 },
     commentaryLength: 'standard',
     mentionRelatedArtists: true,
+    contextualEventsLevel: 'immersive',
   },
 };

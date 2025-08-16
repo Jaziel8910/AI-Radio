@@ -1,4 +1,7 @@
 
+
+
+
 import React from 'react';
 import { ResidentDJ } from '../types';
 import { User, Trash2, Edit, CheckCircle, PlusCircle, ArrowLeft, Copy, Upload, Download } from 'lucide-react';
@@ -12,8 +15,6 @@ interface DJVaultProps {
     onClone: (djId: string) => void;
     onAdd: () => void;
     onBack: () => void;
-    onImport: (djs: ResidentDJ[]) => void;
-    onExportAll: () => void;
     onExportSingle: (djId: string) => void;
 }
 
@@ -61,7 +62,7 @@ const DJCard: React.FC<{ dj: ResidentDJ, isActive: boolean, onSelect: () => void
                 <button onClick={onSelect} disabled={isActive} className="w-full bg-purple-600 font-semibold py-2 rounded-lg hover:bg-purple-500 disabled:bg-slate-600 disabled:cursor-not-allowed">Seleccionar</button>
                 <button onClick={handleEdit} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg" aria-label="Editar DJ"><Edit size={20}/></button>
                 <button onClick={handleClone} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg" aria-label="Clonar DJ"><Copy size={20}/></button>
-                <button onClick={handleExport} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg" aria-label="Exportar DJ"><Download size={20}/></button>
+                <button onClick={handleExport} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg" aria-label="Exportar Personalidad"><Download size={20}/></button>
                 <button onClick={handleDelete} className="p-2 bg-red-900/50 hover:bg-red-900/80 text-red-300 rounded-lg" aria-label="Borrar DJ"><Trash2 size={20}/></button>
             </div>
         </div>
@@ -69,47 +70,12 @@ const DJCard: React.FC<{ dj: ResidentDJ, isActive: boolean, onSelect: () => void
 };
 
 
-const DJVault: React.FC<DJVaultProps> = ({ djs, activeDJId, onSelect, onEdit, onDelete, onClone, onAdd, onBack, onImport, onExportAll, onExportSingle }) => {
+const DJVault: React.FC<DJVaultProps> = ({ djs, activeDJId, onSelect, onEdit, onDelete, onClone, onAdd, onBack, onExportSingle }) => {
     
-    const handleImportClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-        e.preventDefault();
-        const fileInput = document.getElementById('dj-import-input') as HTMLInputElement;
-        fileInput?.click();
-    };
-
-    const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        try {
-            const text = await file.text();
-            let importedData = JSON.parse(text);
-            
-            // Normalize single DJ object to an array
-            if (!Array.isArray(importedData)) {
-                importedData = [importedData];
-            }
-            
-            if (Array.isArray(importedData) && importedData.every(dj => dj.id && dj.name && dj.persona && dj.dna)) {
-                onImport(importedData);
-            } else {
-                alert('Archivo de importación inválido. Asegúrate de que es un archivo JSON exportado desde AI Radio.');
-            }
-        } catch (err) {
-            console.error("Error al importar DJs:", err);
-            alert('Error al leer el archivo de importación.');
-        }
-        e.target.value = '';
-    };
-
     return (
         <div className="animate-[fade-in_0.5s]">
-            <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
+            <div className="flex justify-start mb-6">
                 <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><ArrowLeft size={16}/> Volver a la Estación</button>
-                <div className="flex gap-2">
-                    <button onClick={onExportAll} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><Download size={16}/> Exportar Todo</button>
-                    <button onClick={handleImportClick} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><Upload size={16}/> Importar</button>
-                    <input type="file" id="dj-import-input" accept=".json" className="hidden" onChange={handleFileImport} />
-                </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {djs.map(dj => (

@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { ResidentDJ, DJPersona, DJDNA } from '../types';
 import { DJ_PERSONAS, PUTER_LANGUAGES } from '../constants';
@@ -36,7 +37,7 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
     const [selectedPersona, setSelectedPersona] = useState<DJPersona>(dj?.persona || DJ_PERSONAS[0]);
     const [dna, setDna] = useState<DJDNA>(dj?.dna || { humor: 0, energy: 0, knowledge: 0, tone: 0 });
     
-    const [voiceEngine, setVoiceEngine] = useState(dj?.voiceEngine || 'neural');
+    const [voiceEngine, setVoiceEngine] = useState(dj?.voiceEngine || 'generative');
     const [voiceLanguage, setVoiceLanguage] = useState(dj?.voiceLanguage || 'es-ES');
     const [isTestingVoice, setIsTestingVoice] = useState(false);
 
@@ -171,9 +172,9 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
                      <div>
                         <label htmlFor="puter-engine" className="block text-sm font-medium text-slate-300 mb-2 flex items-center gap-2"><BrainCircuit size={16} className="text-purple-400"/> Calidad del Motor</label>
                         <select id="puter-engine" value={voiceEngine} onChange={(e) => setVoiceEngine(e.target.value as any)} className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3 appearance-none">
-                            <option value="standard">Estándar</option>
-                            <option value="neural">Neural (Recomendado)</option>
-                            <option value="generative">Generativo (Experimental)</option>
+                            <option value="generative">Generativo (Recomendado)</option>
+                            <option value="neural">Neural (Obsoleto)</option>
+                            <option value="standard">Estándar (Obsoleto)</option>
                         </select>
                      </div>
                 </div>

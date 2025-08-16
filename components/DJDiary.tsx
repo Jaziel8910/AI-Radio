@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useEffect } from 'react';
 import { ResidentDJ, DJDiaryEntry, SongMetadata } from '../types';
 import { getDiaryEntries, getDiaryStats, DiaryStats } from '../services/diaryService';
@@ -75,7 +78,7 @@ const DJDiary: React.FC<DJDiaryProps> = ({ dj, onBack }) => {
     useEffect(() => {
         const fetchData = async () => {
             setIsLoading(true);
-            const diaryEntries = getDiaryEntries(dj.id);
+            const diaryEntries = await getDiaryEntries(dj.id);
             const diaryStats = await getDiaryStats();
             setEntries(diaryEntries);
             setStats(diaryStats);
@@ -92,21 +95,28 @@ const DJDiary: React.FC<DJDiaryProps> = ({ dj, onBack }) => {
         return new Date(isoString).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     }
     
-    const renderMemory = (song: SongMetadata, title: string) => (
-        song ? <div className="bg-slate-900/50 p-3 rounded-lg flex items-center gap-3">
-             <img src={song.picture || `https://ui-avatars.com/api/?name=${song.title[0]}&background=4338CA&color=fff`} alt="album" className="w-12 h-12 rounded-md object-cover flex-shrink-0"/>
-            <div>
-                <p className="text-xs text-purple-300 font-semibold">{title}</p>
-                <p className="font-bold text-sm text-white truncate">{song.title}</p>
-                <p className="text-xs text-slate-400 truncate">{song.artist}</p>
+    const renderMemory = (song: SongMetadata, title: string) => {
+        const pictureUrl = song.picture 
+            ? (song.picture.startsWith('http') || song.picture.startsWith('data:') ? song.picture : `data:image/jpeg;base64,${song.picture}`)
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(song.title[0] || 'A')}&background=4338CA&color=fff`;
+
+        return song ? (
+            <div className="bg-slate-900/50 p-3 rounded-lg flex items-center gap-3">
+                 <img src={pictureUrl} alt="album" className="w-12 h-12 rounded-md object-cover flex-shrink-0"/>
+                <div>
+                    <p className="text-xs text-purple-300 font-semibold">{title}</p>
+                    <p className="font-bold text-sm text-white truncate">{song.title}</p>
+                    <p className="text-xs text-slate-400 truncate">{song.artist}</p>
+                </div>
             </div>
-        </div> : null
-    );
+        ) : null;
+    };
+
 
     return (
         <div className="animate-[fade-in_0.5s] max-w-7xl mx-auto">
              <div className="flex justify-start mb-6">
-                 <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><ArrowLeft size={16}/> Volver a la Estación</button>
+                 <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors"><ArrowLeft size={16}/> Volver a Ajustes</button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -156,7 +166,7 @@ const DJDiary: React.FC<DJDiaryProps> = ({ dj, onBack }) => {
                     <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
                         <h3 className="text-xl font-bold mb-4 flex items-center gap-2"><BookHeart size={20} className="text-purple-400"/> La Caja de los Recuerdos</h3>
                         <div className="space-y-3">
-                           {renderMemory(stats?.memoryBox.firstFavorite!, 'Nuestro Primer Hit')}
+                           {stats?.memoryBox.firstFavorite && renderMemory(stats.memoryBox.firstFavorite, 'Nuestro Primer Hit')}
                            {stats?.memoryBox.safeBets.map((song, i) => renderMemory(song, `Apuesta Segura #${i+1}`))}
                            {!stats?.memoryBox.firstFavorite && stats?.memoryBox.safeBets.length === 0 && <p className="text-xs text-slate-500 text-center py-4">Aún no hemos creado grandes recuerdos. ¡Dale a 'me gusta' a una canción!</p>}
                         </div>

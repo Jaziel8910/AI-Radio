@@ -1,15 +1,17 @@
 
+
 import React, { useState, useMemo } from 'react';
 import { DJ_PERSONAS, DJ_PERSONA_CATEGORIES } from '../constants';
 import { DJPersona, ResidentDJ } from '../types';
-import { Sparkles, User, ChevronRight, ChevronLeft, Check } from 'lucide-react';
+import { Sparkles, User, ChevronRight, ChevronLeft, Check, Upload } from 'lucide-react';
 
 interface OnboardingProps {
     onHire: (dj: ResidentDJ) => void;
+    onImport: () => void;
     error: string | null;
 }
 
-const Onboarding: React.FC<OnboardingProps> = ({ onHire, error }) => {
+const Onboarding: React.FC<OnboardingProps> = ({ onHire, onImport, error }) => {
     const [step, setStep] = useState(1);
     const [name, setName] = useState('');
     const [selectedPersona, setSelectedPersona] = useState<DJPersona | null>(null);
@@ -92,7 +94,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onHire, error }) => {
                     <div
                         key={persona.name}
                         onClick={() => setSelectedPersona(persona)}
-                        className={`relative group bg-slate-800 rounded-lg p-4 text-center border-2 cursor-pointer transition-all duration-200 ${selectedPersona?.name === persona.name ? 'border-purple-500 scale-105 shadow-lg shadow-purple-900/50' : 'border-slate-700 hover:border-slate-600'}`}
+                        className={`relative group bg-slate-800 rounded-lg p-4 text-center border cursor-pointer transition-all duration-200 ${selectedPersona?.name === persona.name ? 'ring-2 ring-purple-500 scale-105 shadow-lg shadow-purple-900/50 border-transparent' : 'border-slate-700 hover:border-slate-600'}`}
                     >
                         {selectedPersona?.name === persona.name && <div className="absolute top-2 right-2 bg-purple-500 text-white rounded-full p-1"><Check size={14}/></div>}
                         <h4 className="font-bold text-white">{persona.name}</h4>
@@ -147,6 +149,13 @@ const Onboarding: React.FC<OnboardingProps> = ({ onHire, error }) => {
             {step === 1 && renderStep1()}
             {step === 2 && renderStep2()}
             {step === 3 && renderStep3()}
+
+            <div className="mt-12 border-t border-slate-700 w-full max-w-lg pt-6 text-center">
+                <p className="text-slate-400">¿Ya tienes una cuenta o un archivo de respaldo?</p>
+                <button onClick={onImport} className="mt-2 flex items-center justify-center gap-2 w-full max-w-sm mx-auto text-sm font-semibold bg-slate-800/50 hover:bg-slate-700/80 px-4 py-2 rounded-lg transition-colors">
+                    <Upload size={16}/> Importar desde archivo
+                </button>
+            </div>
         </div>
     );
 };

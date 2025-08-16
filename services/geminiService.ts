@@ -1,8 +1,12 @@
 
+
+
+
 import { GoogleGenAI, Type } from "@google/genai";
-import { AnalyzedSong, ResidentDJ, RadioShow, CustomizationOptions, Source, TimeOfDay, LibrarySong, SongMetadata, DJDNA, Intention } from '../types';
+import { GeminiAnalyzedSong, ResidentDJ, RadioShow, CustomizationOptions, Source, TimeOfDay, LibrarySong, SongMetadata, DJDNA, Intention } from '../types';
 import * as historyService from "./historyService";
 import * as libraryService from "./libraryService";
+import * as contextService from "./contextService";
 
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set");
@@ -12,9 +16,16 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 declare var puter: any;
 
+// A temporary type for the enhancement process
+export interface SongForEnhancement {
+  id: string;
+  metadata: SongMetadata;
+  file: File;
+}
+
 // Moved from historyService to break circular dependency
 export const getHistorySummaryForPrompt = async (): Promise<string> => {
-    const history = historyService.getHistory();
+    const history = await historyService.getHistory();
     const library = await libraryService.getAllSongs();
     
     if (Object.keys(history).length === 0) {
@@ -54,7 +65,7 @@ export const getHistorySummaryForPrompt = async (): Promise<string> => {
     return summary.trim();
 };
 
-export const createDiaryEntry = async (dj: ResidentDJ, songs: AnalyzedSong[], historySummary: string): Promise<string | null> => {
+export const createDiaryEntry = async (dj: ResidentDJ, songs: GeminiAnalyzedSong[], historySummary: string): Promise<string | null> => {
     const songList = songs.map(s => `"${s.metadata.title}" by ${s.metadata.artist}`).join(', ');
     const prompt = `
         Eres ${dj.name}, el DJ de radio personal del usuario. Acabas de terminar una sesión de radio para él/ella que incluía estas canciones: ${songList}.
@@ -100,29 +111,7 @@ async function generateShowArt(title: string, theme: string, negativePrompt: str
     }
 }
 
-async function imageUrlToBase64(url: string): Promise<string | undefined> {
-  if (!url) return undefined;
-  try {
-    if (typeof puter?.fetch !== 'function') {
-        throw new Error('Puter fetch is not available.');
-    }
-    const response = await puter.fetch(url);
-    if (!response.ok) return undefined;
-    const blob = await response.blob();
-    if (!blob.type.startsWith('image/')) return undefined;
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(undefined);
-      reader.readAsDataURL(blob);
-    });
-  } catch (e) {
-    console.error(`Failed to convert image URL ${url} to base64 via Puter proxy`, e);
-    return undefined;
-  }
-}
-
-interface EnhancedSongData { id: string; title: string; artist: string; album?: string; year?: number; genre?: string; coverArtUrl?: string; }
+interface EnhancedSongData { id: string; title: string; artist: string; album?: string; year?: number; genre?: string; }
 
 export const getLyrics = async (title: string, artist: string): Promise<string> => {
     try {
@@ -137,7 +126,38 @@ export const getLyrics = async (title: string, artist: string): Promise<string> 
     }
 };
 
-export const enhanceSongsMetadata = async (songs: LibrarySong[]): Promise<LibrarySong[]> => {
+export const moderateContent = async (content: string): Promise<'TRUE' | 'FALSE' | 'WARNING'> => {
+    try {
+        const prompt = `You are a content moderator for a music community app called 'AI Radio'. Analyze the following user-submitted text. The content is about music, AI DJs, song discovery, sharing presets, etc. Your task is to determine if the content is appropriate.
+- If it is appropriate, safe, and on-topic, return ONLY the word 'TRUE'.
+- If it violates community guidelines (hate speech, spam, harassment, explicit content), return ONLY the word 'FALSE'.
+- If it's borderline, off-topic, or low-quality but not a direct violation, return ONLY the word 'WARNING'.
+
+Your response MUST BE only one of these three words in uppercase, with no other text or punctuation.
+
+User content: "${content}"
+`;
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                temperature: 0, // For deterministic moderation
+            }
+        });
+
+        const result = response.text.trim().toUpperCase();
+        if (result === 'TRUE' || result === 'FALSE' || result === 'WARNING') {
+            return result;
+        }
+        console.warn(`Unexpected moderation response: "${result}". Defaulting to WARNING.`);
+        return 'WARNING'; // Fallback for unexpected responses
+    } catch (e) {
+        console.error("Error moderating content", e);
+        throw new Error("El servicio de moderación no está disponible.");
+    }
+};
+
+export const enhanceSongsMetadata = async (songs: SongForEnhancement[]): Promise<SongForEnhancement[]> => {
     if (songs.length === 0) return [];
     const songsToEnhance = songs.map(s => ({ id: s.id, title: s.metadata.title === s.file.name.replace(/\.[^/.]+$/, "") ? s.file.name : s.metadata.title, artist: s.metadata.artist === 'Artista Desconocido' ? '' : s.metadata.artist }));
 
@@ -152,7 +172,6 @@ export const enhanceSongsMetadata = async (songs: LibrarySong[]): Promise<Librar
                     type: Type.OBJECT, required: ['id', 'title', 'artist'],
                     properties: {
                         id: { type: Type.STRING }, title: { type: Type.STRING }, artist: { type: Type.STRING }, album: { type: Type.STRING }, year: { type: Type.INTEGER }, genre: { type: Type.STRING },
-                        coverArtUrl: { type: Type.STRING, description: "Direct URL to official cover art. Prioritize MusicBrainz, SoundCloud, Bandcamp." }
                     }
                 }
             }
@@ -162,7 +181,7 @@ export const enhanceSongsMetadata = async (songs: LibrarySong[]): Promise<Librar
     const enhancedDataArray: EnhancedSongData[] = JSON.parse(response.text);
     const enhancedDataMap = new Map(enhancedDataArray.map((item: EnhancedSongData) => [item.id, item]));
 
-    return Promise.all(songs.map(async (song) => {
+    return songs.map((song) => {
         const enhanced = enhancedDataMap.get(song.id);
         if (!enhanced) return song;
         const newMetadata: SongMetadata = { ...song.metadata };
@@ -171,9 +190,8 @@ export const enhanceSongsMetadata = async (songs: LibrarySong[]): Promise<Librar
         if (enhanced.album) newMetadata.album = enhanced.album;
         if (enhanced.year) newMetadata.year = enhanced.year;
         if (enhanced.genre) newMetadata.genre = enhanced.genre;
-        if (enhanced.coverArtUrl) { const base64Image = await imageUrlToBase64(enhanced.coverArtUrl); if (base64Image) newMetadata.picture = base64Image; }
         return { ...song, metadata: newMetadata };
-    }));
+    });
 };
 
 const getAdPrompt = (frequency: string, customAds: string) => {
@@ -248,13 +266,53 @@ const getIntentionPrompt = (intention: Intention): string => {
     }
 }
 
-export const createRadioShow = async (songs: AnalyzedSong[], dj: ResidentDJ, options: CustomizationOptions): Promise<RadioShow> => {
+const getContextualEvents = async (options: CustomizationOptions): Promise<string[]> => {
+    if (options.contextualEventsLevel === 'none') return [];
+
+    const events: (string | null)[] = [];
+    const maxEvents = options.contextualEventsLevel === 'immersive' ? 4 : 2;
+
+    const possibleEventFunctions: (() => Promise<string | null>)[] = [
+        contextService.getOnThisDayMusicEvent,
+        contextService.getFamousQuote,
+        contextService.getBoredIdea,
+        contextService.getCatFact,
+        contextService.drawACard,
+    ];
+    
+    // Always try to get weather and holiday as they are very contextual
+    const location = await contextService.getUserLocation();
+    if (location) {
+        events.push(await contextService.getWeatherUpdate(location.lat, location.lon));
+    }
+    events.push(await contextService.getTodaysHoliday());
+
+    // Add intention-specific events
+    if (options.intention === 'Relax') {
+        events.push(await contextService.getSomeAdvice());
+    }
+
+    // Add random events until we reach the limit
+    const shuffledEvents = possibleEventFunctions.sort(() => 0.5 - Math.random());
+    for (const func of shuffledEvents) {
+        if (events.filter(e => e).length >= maxEvents) break;
+        events.push(await func());
+    }
+
+    return events.filter((e): e is string => e !== null);
+}
+
+
+export const createRadioShow = async (songs: GeminiAnalyzedSong[], dj: ResidentDJ, options: CustomizationOptions): Promise<RadioShow> => {
   const songListForPrompt = songs.map(s => `${s.index}: "${s.metadata.title}" por ${s.metadata.artist}`).join('\n');
   const finalTimeOfDay = options.timeOfDay === 'auto' ? getTimeOfDay() : options.timeOfDay;
   const historySummary = await getHistorySummaryForPrompt();
   const personaPrompt = generatePersonaFromDNA(dj);
+  const contextualEvents = await getContextualEvents(options);
+  const showTitle = await contextService.generateCoolShowName();
 
   const contextInstructions = [
+      `Título del show (NO lo cambies): "${showTitle}"`,
       `Intención Principal: ${getIntentionPrompt(options.intention)}`,
       `Hora del Día: ${finalTimeOfDay}.`, 
       `Mood del Usuario: ${getMoodPrompt(options.mood)}`,
@@ -277,7 +335,7 @@ export const createRadioShow = async (songs: AnalyzedSong[], dj: ResidentDJ, opt
       `Identificación de la Estación: ${options.stationIdentificationFrequency}`,
       `Llamadas Falsas: ${options.includeCallIns ? 'Incluye 1 o 2 llamadas cortas de oyentes falsos.' : 'No incluyas llamadas.'}`,
       `Informes del Tiempo: ${options.includeWeatherReports ? 'Incluye 1 o 2 informes del tiempo atmosféricos que encajen con el mood.' : 'No incluyas informes del tiempo.'}`,
-      `Anuncios de Hora: ${options.includeTimeAnnouncements ? 'Anuncia la hora (falsa) de vez en cuando.' : 'No anuncies la hora.'}`
+      `Anuncios de Hora: ${options.includeTimeAnnouncements ? 'Anuncia la hora (falsa) de vez en quando.' : 'No anuncies la hora.'}`
   ];
   
   const flowInstructions = [
@@ -299,10 +357,14 @@ export const createRadioShow = async (songs: AnalyzedSong[], dj: ResidentDJ, opt
 
     **3. CONTEXTO Y DIRECTIVAS PARA ESTA SESIÓN:**
     ${contextInstructions.map(c => `- ${c}`).join('\n    ')}
+
+    **3.5. EVENTOS CONTEXTUALES (Sucesos del mundo real para esta sesión):**
+    Aquí tienes algunos datos y eventos aleatorios sobre el mundo. ÚSALOS de forma natural en tus comentarios para hacer el show más vivo y sorprendente.
+    ${contextualEvents.length > 0 ? contextualEvents.map(c => `- ${c}`).join('\n    ') : '- Sin eventos especiales hoy, ¡improvisa!'}
     
     **4. ESTILO DEL DJ PARA ESTA SESIÓN:**
     ${djStyleInstructions.map(c => `- ${c}`).join('\n    ')}
-
+    
     **5. ELEMENTOS DE LA ESTACIÓN PARA ESTA SESIÓN:**
     ${stationElementsInstructions.map(c => `- ${c}`).join('\n    ')}
 
@@ -321,11 +383,12 @@ export const createRadioShow = async (songs: AnalyzedSong[], dj: ResidentDJ, opt
     **9. Formato de Salida JSON Requerido:**
     Responde ÚNICAMENTE con un objeto JSON válido que siga esta estructura exacta. NO incluyas explicaciones ni markdown.
     {
-      "showTitle": "Un nombre creativo y memorable para la sesión de hoy.",
+      "showTitle": "${showTitle}",
       "introCommentary": "Un saludo inicial de 10-15 segundos para introducir el show, saludando al usuario como si continuarais vuestra conversación de siempre.",
       "playlist": [
         { "type": "song", "songIndex": 0, "commentary": "Tu comentario sobre la canción.", "genre": "Rock" },
         { "type": "jingle", "script": "¡Estás en AI Radio con ${dj.name}!" },
+        { "type": "joke" },
         { "type": "ad_break", "adverts": ["Script del anuncio 1.", "Script del anuncio 2."] }
       ],
       "outroCommentary": "Un comentario final para cerrar la sesión (15-20 segundos), quizás adelantando algo para la próxima vez.",
@@ -344,7 +407,12 @@ export const createRadioShow = async (songs: AnalyzedSong[], dj: ResidentDJ, opt
     const jsonText = response.text.trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
     
     let generatedShow: Omit<RadioShow, 'sources' | 'showArt'>;
-    try { generatedShow = JSON.parse(jsonText); } catch (e) { console.error("Error al parsear JSON:", e, "Respuesta:", jsonText); throw new Error("La IA devolvió un formato inesperado."); }
+    try { 
+      generatedShow = JSON.parse(jsonText); 
+      if (!generatedShow.showTitle) {
+        generatedShow.showTitle = showTitle;
+      }
+    } catch (e) { console.error("Error al parsear JSON:", e, "Respuesta:", jsonText); throw new Error("La IA devolvió un formato inesperado."); }
     
     const sources: Source[] = response.candidates?.[0]?.groundingMetadata?.groundingChunks?.map(c => c.web).filter((w): w is Source => !!w?.uri) || [];
     

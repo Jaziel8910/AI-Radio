@@ -1,10 +1,14 @@
 
-import { DJDiaryEntry, ResidentDJ, AnalyzedSong, ListeningHistory, LibrarySong, SongMetadata } from '../types';
+
+import { DJDiaryEntry, ResidentDJ, GeminiAnalyzedSong, SongMetadata } from '../types';
 import * as geminiService from './geminiService';
 import { getHistory } from './historyService';
 import { getAllSongs } from './libraryService';
 
+declare var puter: any;
+
 const DIARY_KEY_PREFIX = 'aiRadioDJDiary_';
+const isPuterReady = () => typeof puter !== 'undefined' && puter.kv;
 
 export interface DiaryStats {
     genreRadar: { label: string; value: number }[];
@@ -16,42 +20,44 @@ export interface DiaryStats {
     };
 }
 
-export const getDiaryEntries = (djId: string): DJDiaryEntry[] => {
+export const getDiaryEntries = async (djId: string): Promise<DJDiaryEntry[]> => {
+    if (!isPuterReady()) return [];
     try {
         const key = `${DIARY_KEY_PREFIX}${djId}`;
-        const stored = localStorage.getItem(key);
-        return stored ? JSON.parse(stored) : [];
+        const stored = await puter.kv.get(key);
+        return stored ? stored : [];
     } catch (e) {
         console.error("Error reading diary entries:", e);
         return [];
     }
 };
 
-export const addDiaryEntry = (djId: string, content: string, type: 'thought' | 'milestone' = 'thought') => {
+export const addDiaryEntry = async (djId: string, content: string, type: 'thought' | 'milestone' = 'thought') => {
+    if (!isPuterReady()) return;
     try {
-        const entries = getDiaryEntries(djId);
+        const entries = await getDiaryEntries(djId);
         const newEntry: DJDiaryEntry = {
             timestamp: new Date().toISOString(),
             content,
             type
         };
         entries.unshift(newEntry); // Add to the beginning
-        localStorage.setItem(`${DIARY_KEY_PREFIX}${djId}`, JSON.stringify(entries.slice(0, 50))); // Keep last 50
+        await puter.kv.set(`${DIARY_KEY_PREFIX}${djId}`, entries.slice(0, 50)); // Keep last 50
     } catch (e) {
         console.error("Error saving diary entry:", e);
     }
 };
 
-export const generateAndSavePostShowEntry = async (dj: ResidentDJ, songsInShow: AnalyzedSong[]) => {
+export const generateAndSavePostShowEntry = async (dj: ResidentDJ, songsInShow: GeminiAnalyzedSong[]) => {
     const historySummary = await geminiService.getHistorySummaryForPrompt();
     const thought = await geminiService.createDiaryEntry(dj, songsInShow, historySummary);
     if (thought) {
-        addDiaryEntry(dj.id, thought);
+        await addDiaryEntry(dj.id, thought);
     }
 };
 
 export const getDiaryStats = async (): Promise<DiaryStats> => {
-    const history = getHistory();
+    const history = await getHistory();
     const library = await getAllSongs();
     const libraryMap = new Map(library.map(s => [s.id, s]));
 

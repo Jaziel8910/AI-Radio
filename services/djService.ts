@@ -1,75 +1,64 @@
 
-import { ResidentDJ, DJPersona } from '../types';
+
+import { ResidentDJ } from '../types';
+
+declare var puter: any;
 
 const DJS_KEY = 'aiRadioDJs';
 const ACTIVE_DJ_ID_KEY = 'aiRadioActiveDJId';
-const LEGACY_DJ_KEY = 'aiRadioResidentDJ';
 
-// Cargar todos los DJs desde localStorage
-export const getDJs = (): ResidentDJ[] => {
+const isPuterReady = () => typeof puter !== 'undefined' && puter.kv;
+
+// Cargar todos los DJs desde Puter KV
+export const getDJs = async (): Promise<ResidentDJ[]> => {
+  if (!isPuterReady()) return [];
   try {
-    const stored = localStorage.getItem(DJS_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const stored = await puter.kv.get(DJS_KEY);
+    return stored ? (stored as ResidentDJ[]) : [];
   } catch (e) {
-    console.error("Error reading DJs from localStorage:", e);
+    console.error("Error reading DJs from Puter KV:", e);
     return [];
   }
 };
 
-// Guardar todos los DJs en localStorage
-export const saveDJs = (djs: ResidentDJ[]): void => {
+// Guardar todos los DJs en Puter KV
+export const saveDJs = async (djs: ResidentDJ[]): Promise<void> => {
+  if (!isPuterReady()) return;
   try {
-    localStorage.setItem(DJS_KEY, JSON.stringify(djs));
+    await puter.kv.set(DJS_KEY, djs);
   } catch (e) {
-    console.error("Error saving DJs to localStorage:", e);
+    console.error("Error saving DJs to Puter KV:", e);
   }
 };
 
 // Obtener el ID del DJ activo
-export const getActiveDJId = (): string | null => {
-  return localStorage.getItem(ACTIVE_DJ_ID_KEY);
+export const getActiveDJId = async (): Promise<string | null> => {
+  if (!isPuterReady()) return null;
+  return await puter.kv.get(ACTIVE_DJ_ID_KEY) || null;
 };
 
 // Establecer el ID del DJ activo
-export const setActiveDJId = (id: string): void => {
-  localStorage.setItem(ACTIVE_DJ_ID_KEY, id);
+export const setActiveDJId = async (id: string | null): Promise<void> => {
+  if (!isPuterReady()) return;
+  if (id) {
+    await puter.kv.set(ACTIVE_DJ_ID_KEY, id);
+  } else {
+    await puter.kv.del(ACTIVE_DJ_ID_KEY);
+  }
 };
 
-// Migra un DJ del sistema antiguo (un solo objeto) al nuevo sistema (array)
-export const migrateLegacyDJ = async (): Promise<void> => {
-  return new Promise(resolve => {
-    try {
-        const legacyDJString = localStorage.getItem(LEGACY_DJ_KEY);
-        if (legacyDJString) {
-            console.log("Legacy DJ found, migrating...");
-            // Check if new system already has DJs, to prevent overwriting
-            const existingDJs = getDJs();
-            if (existingDJs.length > 0) {
-                console.log("New DJ system already populated. Skipping migration.");
-                localStorage.removeItem(LEGACY_DJ_KEY);
-                resolve();
-                return;
-            }
-
-            const legacyDJ: { name: string; persona: DJPersona } = JSON.parse(legacyDJString);
-            const newDJ: ResidentDJ = {
-                ...legacyDJ,
-                id: crypto.randomUUID(),
-                dna: { humor: 0, energy: 0, knowledge: 0, tone: 0 },
-                voiceLanguage: 'es-ES',
-                voiceEngine: 'neural',
-            };
-
-            saveDJs([newDJ]);
-            setActiveDJId(newDJ.id);
-            localStorage.removeItem(LEGACY_DJ_KEY);
-            console.log("Migration complete.");
-        }
-    } catch (e) {
-        console.error("Error migrating legacy DJ:", e);
-        // If migration fails, remove the broken legacy key to prevent loops
-        localStorage.removeItem(LEGACY_DJ_KEY);
-    }
-    resolve();
-  });
-};
+export const exportSingleDJ = async (djId: string) => {
+    const djs = await getDJs();
+    const dj = djs.find(d => d.id === djId);
+    if (!dj) return;
+    const jsonString = JSON.stringify(dj, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${dj.name.replace(/\s/g, '_')}_personality.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };

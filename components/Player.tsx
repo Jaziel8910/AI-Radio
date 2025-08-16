@@ -1,27 +1,16 @@
 
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { AnalyzedSong, RadioShow, AppState, PlaylistItem, SongItem, Genre, Source, CustomizationOptions, ResidentDJ } from '../types';
+import { AnalyzedSong, RadioShow, AppState, PlaylistItem, SongItem, Genre, Source, CustomizationOptions, ResidentDJ, LibrarySong } from '../types';
 import { Play, Pause, MoreVertical, ThumbsUp, ThumbsDown, Share2, Maximize, X, FileText, Minimize, LoaderCircle, Volume2, Volume1, VolumeX, BookOpen, Clock, Radio } from 'lucide-react';
 import { logSongPlay, logSongFinish, logSongFavorite, logSongSkip, logSongDislike } from '../services/historyService';
 import { getLyrics } from '../services/geminiService';
 import { generateAndSavePostShowEntry } from '../services/diaryService';
-import { VISUALIZER_PALETTES, Palette } from '../constants';
+import { getARandomJoke } from '../services/contextService';
 
 declare var puter: any;
 
-const FADE_TIME = 0.5;
-const EQ_FREQUENCIES = [60, 250, 1000, 3500, 7000, 12000];
-const EQ_PRESETS: Record<string, number[]> = {
-  'Rock':       [5, 3, -2, 1, 4, 6],
-  'Electronic': [6, 4, 0, -1, 3, 5],
-  'Pop':        [4, 2, 1, 2, 3, 4],
-  'Hip-Hop':    [7, 5, 1, 0, 2, 3],
-  'Jazz':       [2, 0, 3, 4, 2, 1],
-  'Classical':  [0, 0, 0, 0, 0, 0],
-  'Vocal':      [-2, -1, 4, 5, 3, -1],
-  'Other':      [0, 0, 0, 0, 0, 0],
-};
+const FADE_INTERVAL = 50; // ms
+const FADE_TIME = 1000; // ms
 
 enum PlayerStatus { LOADING, SPEAKING, PLAYING, ENDED }
 
@@ -49,17 +38,10 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   const [sleepTimer, setSleepTimer] = useState<number | null>(null);
   const [isClosing, setIsClosing] = useState(false);
   
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const masterGainRef = useRef<GainNode | null>(null);
-  const volumeGainRef = useRef<GainNode | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const eqNodesRef = useRef<BiquadFilterNode[]>([]);
-  const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const songBuffersRef = useRef<Map<number, AudioBuffer>>(new Map());
-  
-  const visualizerAnimationRef = useRef<number | null>(null);
+  const audioElementRef = useRef<HTMLAudioElement>(null);
+  const currentSongUrlRef = useRef<string | null>(null);
+
   const playerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const cancellationRef = useRef<(() => void) | null>(null);
   const lastVolumeRef = useRef(volume);
   const sleepTimerRef = useRef<number | null>(null);
@@ -67,8 +49,9 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
 
   const currentPlaylistItem = playlistIndex >= 0 && playlistIndex < show.playlist.length ? show.playlist[playlistIndex] : null;
   const currentSongItem = currentPlaylistItem?.type === 'song' ? currentPlaylistItem as SongItem : null;
-  const currentSong = currentSongItem ? songs.find(s => s.index === currentSongItem.songIndex) : null;
-  const isSongFavorited = currentSong ? favoritedSongs.has(currentSong.songId) : false;
+  const currentAnalyzedSong = currentSongItem ? songs.find(s => s.index === currentSongItem.songIndex) : null;
+  const currentSong = currentAnalyzedSong?.song || null;
+  const isSongFavorited = currentSong ? favoritedSongs.has(currentSong.id) : false;
 
   const setPlayerStatus = useCallback((newStatus: PlayerStatus) => {
     if (newStatus === PlayerStatus.PLAYING || newStatus === PlayerStatus.SPEAKING) {
@@ -83,18 +66,32 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
       cancellationRef.current = null;
     }
   }, []);
+  
+  const animateVolume = (targetVolume: number, duration: number, onComplete?: () => void) => {
+      const audio = audioElementRef.current;
+      if (!audio) return;
+      
+      const startVolume = audio.volume;
+      const steps = duration / FADE_INTERVAL;
+      const volumeStep = (targetVolume - startVolume) / steps;
+      let currentStep = 0;
+      
+      const fadeInterval = setInterval(() => {
+          if (currentStep >= steps) {
+              clearInterval(fadeInterval);
+              audio.volume = targetVolume;
+              if (onComplete) onComplete();
+              return;
+          }
+          audio.volume += volumeStep;
+          currentStep++;
+      }, FADE_INTERVAL);
+  };
 
   const speak = useCallback(async (text: string, isInterruptible: boolean = false): Promise<void> => {
     if (!isInterruptible) cleanupCurrentTask();
     if (!text?.trim()) return Promise.resolve();
     
-    if (audioContextRef.current?.state === 'suspended') await audioContextRef.current.resume();
-
-    if (typeof puter === 'undefined' || !puter.ai || !puter.ai.txt2speech) {
-        console.error("Puter.js AI library not available for TTS.");
-        return Promise.resolve();
-    }
-
     return new Promise((resolve) => {
       if (!isInterruptible) setPlayerStatus(PlayerStatus.SPEAKING);
       setCurrentCommentary(text);
@@ -111,6 +108,7 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
           language: dj.voiceLanguage || 'es-ES',
           engine: dj.voiceEngine || 'neural',
       };
+
       puter.ai.txt2speech(text, puterOptions).then((audio: HTMLAudioElement) => {
           currentPuterAudioRef.current = audio;
           audio.play().catch(playError => {
@@ -145,59 +143,55 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
     });
   }, [cleanupCurrentTask, setPlayerStatus, dj]);
   
-  const applyEQ = useCallback((genre: Genre) => {
-    if (!eqNodesRef.current.length || !audioContextRef.current) return;
-    const preset = EQ_PRESETS[genre] || EQ_PRESETS['Other'];
-    eqNodesRef.current.forEach((filter, i) => {
-      filter.gain.setValueAtTime(preset[i], audioContextRef.current!.currentTime);
-    });
-  }, []);
+  const playSong = useCallback(async (song: LibrarySong): Promise<void> => {
+      cleanupCurrentTask();
+      const audio = audioElementRef.current;
+      if (!audio) return Promise.resolve();
 
-  const playSong = useCallback(async (songIndex: number, genre: Genre): Promise<void> => {
-    cleanupCurrentTask();
-    const context = audioContextRef.current;
-    if (context?.state === 'suspended') await context.resume();
-    
-    const masterGain = masterGainRef.current;
-    const songBuffer = songBuffersRef.current.get(songIndex);
-
-    if (!context || !masterGain || !songBuffer) return Promise.resolve();
-    
-    return new Promise((resolve) => {
-      const songData = songs.find(s => s.index === songIndex);
-      if (songData) logSongPlay(songData.songId);
-
-      const source = context.createBufferSource();
-      source.buffer = songBuffer;
-      // Connect source to the beginning of the audio chain
-      source.connect(masterGainRef.current!);
-      currentSourceRef.current = source;
-      
-      applyEQ(genre);
-
-      source.start(0, 0);
-      
-      masterGain.gain.cancelScheduledValues(context.currentTime);
-      masterGain.gain.setValueAtTime(masterGain.gain.value, context.currentTime);
-      masterGain.gain.linearRampToValueAtTime(1, context.currentTime + FADE_TIME);
-      
-      setPlayerStatus(PlayerStatus.PLAYING);
-      setAppState(AppState.PLAYING);
-      
-      const handleEnd = () => {
-        if (currentSourceRef.current === source) {
-            if(songData) logSongFinish(songData.songId);
-            cancellationRef.current = null;
-            currentSourceRef.current = null;
-            resolve();
+      try {
+        const streamUrl = await puter.fs.getLink(song.puterFsPath);
+        if (!streamUrl) {
+            throw new Error(`Could not get stream URL for ${song.puterFsPath}`);
         }
-      };
-      
-      source.onended = handleEnd;
 
-      cancellationRef.current = () => { source.onended = null; try { source.stop(); } catch(e) { /* ignore */ } resolve(); };
-    });
-  }, [cleanupCurrentTask, applyEQ, songs, setAppState, setPlayerStatus]);
+        return new Promise((resolve) => {
+            currentSongUrlRef.current = streamUrl;
+            audio.src = streamUrl;
+            audio.volume = 0;
+            const playPromise = audio.play();
+            
+            playPromise.then(() => {
+                logSongPlay(song.id);
+                animateVolume(isMuted ? 0 : volume, FADE_TIME);
+                setPlayerStatus(PlayerStatus.PLAYING);
+                setAppState(AppState.PLAYING);
+
+                const handleEnd = async () => {
+                    audio.removeEventListener('ended', handleEnd);
+                    logSongFinish(song.id);
+                    cancellationRef.current = null;
+                    resolve();
+                };
+                audio.addEventListener('ended', handleEnd);
+                
+                cancellationRef.current = () => {
+                    audio.removeEventListener('ended', handleEnd);
+                    try { audio.pause(); } catch(e) { /* ignore */ }
+                    resolve();
+                };
+            }).catch(error => {
+                console.error("Error playing song:", error);
+                speak(`Hubo un problema al reproducir "${song.metadata.title}". Saltando a la siguiente.`, true);
+                resolve();
+            });
+        });
+      } catch(error) {
+         console.error("Failed to get song from Puter FS:", error);
+         speak(`No se pudo cargar "${song.metadata.title}" desde tu librería.`, true);
+         return Promise.resolve();
+      }
+  }, [cleanupCurrentTask, volume, isMuted, setAppState, setPlayerStatus, speak]);
+
 
   const advancePlaylist = useCallback((nextIndex: number) => {
     cleanupCurrentTask();
@@ -206,28 +200,27 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   }, [cleanupCurrentTask]);
 
   const fadeOutAndExecute = (callback: () => void) => {
-    const context = audioContextRef.current;
-    const masterGain = masterGainRef.current;
-    if (status === PlayerStatus.PLAYING && context && masterGain) {
-        masterGain.gain.cancelScheduledValues(context.currentTime);
-        masterGain.gain.setValueAtTime(masterGain.gain.value, context.currentTime);
-        masterGain.gain.linearRampToValueAtTime(0, context.currentTime + FADE_TIME);
-        setTimeout(() => { callback(); }, FADE_TIME * 1000);
-    } else {
-        callback();
-    }
+      const audio = audioElementRef.current;
+      if (status === PlayerStatus.PLAYING && audio && !audio.paused) {
+          animateVolume(0, FADE_TIME, () => {
+              audio.pause();
+              callback();
+          });
+      } else {
+          callback();
+      }
   }
 
-  const handleDislike = () => {
+  const handleDislike = async () => {
     if (isTransitioning || status === PlayerStatus.ENDED || !currentSong) return;
     setIsTransitioning(true);
     if(show.userReactions?.onSkip) speak(show.userReactions.onSkip, true);
-    logSongDislike(currentSong.songId);
-    logSongSkip(currentSong.songId);
+    await logSongDislike(currentSong.id);
+    await logSongSkip(currentSong.id);
     fadeOutAndExecute(() => advancePlaylist(playlistIndex + 1));
   };
   
-  const handleFavorite = useCallback(() => { if(currentSong) { if(show.userReactions?.onFavorite) speak(show.userReactions.onFavorite, true); logSongFavorite(currentSong.songId); setFavoritedSongs(prev => new Set(prev).add(currentSong.songId)); } }, [currentSong, show.userReactions, speak]);
+  const handleFavorite = useCallback(async () => { if(currentSong) { if(show.userReactions?.onFavorite) speak(show.userReactions.onFavorite, true); await logSongFavorite(currentSong.id); setFavoritedSongs(prev => new Set(prev).add(currentSong.id)); } }, [currentSong, show.userReactions, speak]);
 
   const handleShare = async () => {
     const shareText = `Estoy escuchando "${show.showTitle}", una sesión de radio generada por IA en AI Radio. Canción actual: "${currentSong?.metadata.title}" de ${currentSong?.metadata.artist}.`;
@@ -294,7 +287,13 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
       setIsClosing(true);
       setCurrentCommentary(`Guardando las notas de ${dj.name} sobre la sesión...`);
       try {
-          await generateAndSavePostShowEntry(dj, songs);
+          // This needs the original analyzed songs, not the full LibrarySong object
+          const songsForDiary = songs.map(s => ({
+              index: s.index,
+              songId: s.song.id,
+              metadata: s.song.metadata,
+          }));
+          await generateAndSavePostShowEntry(dj, songsForDiary);
       } catch (e) {
           console.error("Failed to save diary entry:", e);
       } finally {
@@ -314,10 +313,10 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
         }
         const item = show.playlist[playlistIndex];
         if (item.type === 'song') {
-            const songData = songs.find(s => s.index === item.songIndex);
+            const songData = songs.find(s => s.index === item.songIndex)?.song;
             if (!songData) { advancePlaylist(playlistIndex + 1); return; }
             await speak(item.commentary); if (isCancelled) return;
-            await playSong(item.songIndex, item.genre); if (isCancelled) return;
+            await playSong(songData); if (isCancelled) return;
             advancePlaylist(playlistIndex + 1);
         } else if (item.type === 'ad_break') {
             for (const ad of item.adverts) { await speak(ad); if (isCancelled) return; }
@@ -325,97 +324,17 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
         } else if (item.type === 'jingle') {
             await speak(item.script); if(isCancelled) return;
             advancePlaylist(playlistIndex + 1);
+        } else if (item.type === 'joke') {
+            const jokeText = await getARandomJoke();
+            if(jokeText) await speak(jokeText);
+            if(isCancelled) return;
+            advancePlaylist(playlistIndex + 1);
         }
     };
     runSequence();
     return () => { isCancelled = true; cleanupCurrentTask(); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playlistIndex]);
-
-  // Visualizer effect
-  useEffect(() => {
-    if (status !== PlayerStatus.PLAYING || !analyserRef.current || !canvasRef.current) {
-        if (visualizerAnimationRef.current) {
-            cancelAnimationFrame(visualizerAnimationRef.current);
-            visualizerAnimationRef.current = null;
-        }
-        return;
-    }
-    const analyser = analyserRef.current; 
-    const canvas = canvasRef.current; 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const palette: Palette = VISUALIZER_PALETTES[options.visualizerColorPalette] || VISUALIZER_PALETTES['neon_purple'];
-    const bufferLength = analyser.frequencyBinCount; 
-    const dataArray = new Uint8Array(bufferLength);
-    
-    const drawBars = () => {
-        const barWidth = (canvas.clientWidth / bufferLength) * 2.5;
-        let x = 0;
-        for (let i = 0; i < bufferLength; i++) {
-            const barHeight = dataArray[i];
-            const grad = ctx.createLinearGradient(0, canvas.clientHeight, 0, canvas.clientHeight - barHeight);
-            palette.gradient.forEach(stop => grad.addColorStop(stop[0], stop[1]));
-            ctx.fillStyle = grad;
-            ctx.shadowColor = palette.shadow;
-            ctx.shadowBlur = 10;
-            ctx.fillRect(x, canvas.clientHeight - barHeight, barWidth, barHeight);
-            x += barWidth + 1;
-        }
-    };
-    const drawWaveform = () => {
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = palette.stroke || 'rgb(255, 255, 255)';
-        ctx.shadowColor = palette.shadow;
-        ctx.shadowBlur = 5;
-        ctx.beginPath();
-        const sliceWidth = canvas.clientWidth * 1.0 / bufferLength;
-        let x = 0;
-        for (let i = 0; i < bufferLength; i++) {
-            const v = dataArray[i] / 128.0;
-            const y = v * canvas.clientHeight / 2;
-            if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
-            x += sliceWidth;
-        }
-        ctx.lineTo(canvas.width, canvas.height / 2);
-        ctx.stroke();
-    };
-    const drawCircle = () => {
-        const centerX = canvas.clientWidth / 2;
-        const centerY = canvas.clientHeight / 2;
-        const radius = Math.min(centerX, centerY) * 0.5;
-        const barCount = bufferLength * 0.7;
-
-        for (let i = 0; i < barCount; i++) {
-            const barHeight = dataArray[i] * 0.5;
-            const angle = (i / barCount) * Math.PI * 2;
-            
-            const x1 = centerX + radius * Math.cos(angle);
-            const y1 = centerY + radius * Math.sin(angle);
-            const x2 = centerX + (radius + barHeight) * Math.cos(angle);
-            const y2 = centerY + (radius + barHeight) * Math.sin(angle);
-
-            const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-            palette.gradient.forEach(stop => grad.addColorStop(stop[0], stop[1]));
-            ctx.strokeStyle = grad;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-        }
-    };
-    const draw = () => {
-        visualizerAnimationRef.current = requestAnimationFrame(draw);
-        if(options.visualizerStyle === 'waveform') analyser.getByteTimeDomainData(dataArray); else analyser.getByteFrequencyData(dataArray);
-        const dpr = window.devicePixelRatio || 1; canvas.width = canvas.clientWidth * dpr; canvas.height = canvas.clientHeight * dpr; ctx.scale(dpr, dpr); ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-        switch(options.visualizerStyle) { case 'waveform': drawWaveform(); break; case 'circle': drawCircle(); break; case 'bars': default: drawBars(); break; }
-        ctx.shadowBlur = 0;
-    }; draw();
-    return () => { if (visualizerAnimationRef.current) cancelAnimationFrame(visualizerAnimationRef.current); };
-  }, [status, options.visualizerStyle, options.visualizerColorPalette]);
-
 
   useEffect(() => { const fsChangeHandler = () => setIsFullScreen(!!document.fullscreenElement); document.addEventListener('fullscreenchange', fsChangeHandler); return () => document.removeEventListener('fullscreenchange', fsChangeHandler); }, []);
 
@@ -435,69 +354,37 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   useEffect(() => {
     const initAudioEngine = async () => {
       try {
-        const context = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioContextRef.current = context;
-        masterGainRef.current = context.createGain();
-        volumeGainRef.current = context.createGain();
-        analyserRef.current = context.createAnalyser();
-        analyserRef.current.fftSize = 256;
-        
-        // --- Definitive Audio Graph Wiring ---
-        // The flow is: source -> masterGain (for fades) -> volumeGain (for user volume) -> EQ chain -> analyser -> destination
-        let lastNode: AudioNode = volumeGainRef.current;
-        eqNodesRef.current = EQ_FREQUENCIES.map(f => {
-            const filter = context.createBiquadFilter();
-            filter.type = 'peaking'; filter.frequency.value = f; filter.Q.value = 1.5; filter.gain.value = 0;
-            // Connect the previous node to this filter, creating a chain
-            lastNode.connect(filter);
-            lastNode = filter; // This filter is now the last node
-            return filter;
-        });
-        
-        // Connect the end of the EQ chain to the analyser
-        lastNode.connect(analyserRef.current);
-        // Connect the analyser to the final output
-        analyserRef.current.connect(context.destination);
-        // Connect the master gain (fades) to the volume gain (user control)
-        masterGainRef.current.connect(volumeGainRef.current);
-        // Any new source will now connect to masterGainRef, and the chain is complete.
-        
-        volumeGainRef.current.gain.value = isMuted ? 0 : volume;
-
-        await Promise.all(songs.map(async (song) => {
-          const res = await fetch(song.fileUrl); const buf = await res.arrayBuffer();
-          songBuffersRef.current.set(song.index, await context.decodeAudioData(buf));
-        }));
-        
         await speak(show.showTitle);
         await speak(show.introCommentary);
         setPlaylistIndex(0);
       } catch(e) { console.error("Error initializing audio engine:", e); setCurrentCommentary("Error al cargar el audio."); setPlayerStatus(PlayerStatus.ENDED); }
     };
     initAudioEngine();
-    return () => { cleanupCurrentTask(); audioContextRef.current?.close(); songs.forEach(s => URL.revokeObjectURL(s.fileUrl)); if(sleepTimerRef.current) clearTimeout(sleepTimerRef.current); };
+    return () => { 
+        cleanupCurrentTask(); 
+        if(sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (volumeGainRef.current) {
-        lastVolumeRef.current = volume;
-        volumeGainRef.current.gain.setValueAtTime(isMuted ? 0 : volume, audioContextRef.current?.currentTime || 0);
-    }
+      if (audioElementRef.current) {
+          audioElementRef.current.volume = isMuted ? 0 : volume;
+      }
   }, [volume, isMuted]);
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => { setVolume(Number(e.target.value)); setIsMuted(false); };
   const toggleMute = () => { if(isMuted) { setIsMuted(false); setVolume(lastVolumeRef.current || 0.5); } else { lastVolumeRef.current = volume; setIsMuted(true); setVolume(0); } };
   
-  const isPlaying = status === PlayerStatus.PLAYING;
   const isControlDisabled = status === PlayerStatus.LOADING || status === PlayerStatus.ENDED;
 
   if (status === PlayerStatus.LOADING && playlistIndex < 0) {
-      return (<div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center text-white"><LoaderCircle className="w-12 h-12 animate-spin text-purple-400 mb-4" /><p className="text-lg">Afinando el motor de audio...</p></div>);
+      return (<div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center text-white"><LoaderCircle className="w-12 h-12 animate-spin text-purple-400 mb-4" /><p className="text-lg">Calentando los motores de la radio...</p></div>);
   }
   
   return (
     <div ref={playerRef} className="fixed inset-0 bg-slate-900 text-white flex flex-col font-sans overflow-hidden select-none">
+      <audio ref={audioElementRef} preload="auto" />
       <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 transition-all duration-1000" style={{ backgroundImage: show.showArt ? `url(${show.showArt})` : '', backgroundSize: 'cover', backgroundPosition: 'center' }} />
       <div className="absolute inset-0 z-0 bg-black/60 backdrop-blur-2xl"></div>
       
@@ -543,7 +430,10 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
         </header>
 
         <main className="flex-grow flex flex-col items-center justify-center my-4 overflow-hidden">
-             <canvas ref={canvasRef} className="w-full max-w-4xl h-32 sm:h-48 md:h-56 transition-opacity duration-500" style={{ opacity: isPlaying ? 1 : 0.4}} />
+             {/* Visualizer placeholder */}
+             <div className="w-full max-w-4xl h-32 sm:h-48 md:h-56 flex items-center justify-center transition-opacity duration-500" style={{ opacity: status === PlayerStatus.PLAYING ? 1 : 0.4}}>
+                <Radio size={64} className={`text-purple-400/80 ${status === PlayerStatus.PLAYING ? 'animate-pulse' : ''}`} />
+             </div>
              <div className="text-center mt-8 sm:mt-12 transition-opacity duration-500" style={{ opacity: isControlDisabled ? 0.7 : 1}}>
                 <h2 className="text-3xl sm:text-5xl font-bold text-white truncate">{currentSong?.metadata.title || 'AI Radio'}</h2>
                 <p className="text-lg sm:text-xl text-slate-300 truncate">{currentSong?.metadata.artist || 'Tu DJ Personal'}</p>
@@ -560,7 +450,7 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
             
             <div className="flex flex-col items-center">
                 <div className="flex items-center gap-2 text-lg font-bold text-purple-300 uppercase tracking-widest">
-                    <Radio size={20} className="animate-pulse" />
+                    <Radio size={20} className={status === PlayerStatus.PLAYING ? 'animate-pulse' : ''} />
                     <span>On Air</span>
                 </div>
                 {currentSongItem && <p className="text-xs text-slate-400 mt-1">{currentSongItem.genre} &bull; {currentSong?.metadata.year || 'N/A'}</p>}
@@ -571,7 +461,7 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
 
            <div className="flex items-center justify-center gap-2 w-full sm:w-auto mt-6">
                 <button onClick={toggleMute} aria-label={isMuted || volume === 0 ? 'Quitar silencio' : 'Silenciar'} className="p-2 text-slate-300 hover:text-white">{isMuted || volume === 0 ? <VolumeX size={20}/> : volume < 0.5 ? <Volume1 size={20}/> : <Volume2 size={20}/>}</button>
-                <input type="range" min="0" max="1" step="0.01" value={volume} onChange={handleVolumeChange} className="progress-bar w-32" aria-label="Control de volumen" />
+                <input type="range" min="0" max="1" step="0.01" value={isMuted ? 0 : volume} onChange={handleVolumeChange} className="progress-bar w-32" aria-label="Control de volumen" />
             </div>
 
         </footer>

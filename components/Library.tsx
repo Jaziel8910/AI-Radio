@@ -1,4 +1,7 @@
 
+
+
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { CustomizationOptions, LibrarySong, SongMetadata, ResidentDJ, Intention } from '../types';
 import { INTENTIONS } from '../constants';
@@ -41,6 +44,7 @@ const Library: React.FC<LibraryProps> = ({ activeDJ, onCreateShow, onManageDJs, 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSongIds, setSelectedSongIds] = useState<Set<string>>(new Set());
   const [isImporting, setIsImporting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number, total: number, fileName: string } | null>(null);
   const [editingSong, setEditingSong] = useState<LibrarySong | null>(null);
   
   const [customizationState, setCustomizationState] = useState<{ intention: Intention; songs: LibrarySong[] } | null>(null);
@@ -58,13 +62,28 @@ const Library: React.FC<LibraryProps> = ({ activeDJ, onCreateShow, onManageDJs, 
 
   useEffect(() => { loadSongs(); }, [loadSongs]);
 
-  const handleFileDrop = useCallback(async (files: File[]) => { setIsImporting(true); setError(null); try { await libraryService.addSongs(files); await loadSongs(); } catch (e) { setError(e instanceof Error ? e.message : 'Error al importar.'); } finally { setIsImporting(false); } }, [loadSongs, setError]);
+  const handleFileDrop = useCallback(async (files: File[]) => { 
+    setIsImporting(true); 
+    setUploadProgress({ current: 0, total: files.length, fileName: "" });
+    setError(null); 
+    try { 
+        await libraryService.addSongs(files, (progress) => {
+            setUploadProgress(progress);
+        }); 
+        await loadSongs(); 
+    } catch (e) { 
+        setError(e instanceof Error ? e.message : 'Error al importar.'); 
+    } finally { 
+        setIsImporting(false); 
+        setUploadProgress(null);
+    } 
+  }, [loadSongs, setError]);
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) handleFileDrop(Array.from(e.dataTransfer.files)); }, [handleFileDrop]);
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); }; const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(true); }; const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(false); };
   
   const handleSongSelection = (songId: string) => { const newSelection = new Set(selectedSongIds); if (newSelection.has(songId)) newSelection.delete(songId); else newSelection.add(songId); setSelectedSongIds(newSelection); }
   const handleSelectAll = () => setSelectedSongIds(selectedSongIds.size === filteredSongs.length ? new Set() : new Set(filteredSongs.map(s => s.id)));
-  const handleDeleteSelected = async () => { if (selectedSongIds.size > 0 && window.confirm(`Borrar ${selectedSongIds.size} canciones?`)) { await libraryService.deleteSongs(Array.from(selectedSongIds)); setSelectedSongIds(new Set()); await loadSongs(); } }
+  const handleDeleteSelected = async () => { if (selectedSongIds.size > 0 && window.confirm(`Borrar ${selectedSongIds.size} canciones? Se eliminarán de tu Puter FS.`)) { await libraryService.deleteSongs(Array.from(selectedSongIds)); setSelectedSongIds(new Set()); await loadSongs(); } }
   const handleSaveMetadata = async (updatedSong: LibrarySong) => { await libraryService.updateSongs([updatedSong]); setEditingSong(null); await loadSongs(); };
   
   const handleIntentionClick = (intention: Intention) => {
@@ -96,11 +115,19 @@ const Library: React.FC<LibraryProps> = ({ activeDJ, onCreateShow, onManageDJs, 
   };
 
   const renderEmptyState = () => (
-     <div className="w-full text-center p-8"><h2 className="text-4xl md:text-5xl font-black text-white">¡Bienvenido a tu Estación!</h2><p className="text-lg text-slate-300 max-w-3xl mx-auto mt-4">Aquí es donde vive tu música. Arrastra y suelta tus archivos de audio para que {activeDJ.name} los conozca, encuentre carátulas y prepare tu próxima sesión.</p>
+     <div className="w-full text-center p-8"><h2 className="text-4xl md:text-5xl font-black text-white">¡Bienvenido a tu Estación!</h2><p className="text-lg text-slate-300 max-w-3xl mx-auto mt-4">Aquí es donde vive tu música. Arrastra tus archivos de audio para subirlos a tu nube privada de Puter. {activeDJ.name} los analizará para preparar tu próxima sesión.</p>
         <div onDrop={handleDrop} onDragOver={handleDragOver} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} className={`relative border-2 border-dashed rounded-xl p-10 text-center transition-all mt-8 max-w-2xl mx-auto ${isDragging ? 'border-purple-500 bg-purple-500/10 scale-105' : 'border-slate-600'}`}>
             <input type="file" id="file-upload" multiple accept="audio/*" onChange={(e) => e.target.files && handleFileDrop(Array.from(e.target.files))} className="absolute inset-0 opacity-0 cursor-pointer"/>
-            <label htmlFor="file-upload" className="flex flex-col items-center justify-center cursor-pointer"><UploadCloud className={`w-12 h-12 mb-3 ${isDragging ? 'text-purple-400' : 'text-slate-500'}`} /><p className="text-lg font-semibold">Añade Tus Primeras Canciones</p><p className="text-sm text-slate-400">Arrastra o haz clic para añadir a la librería</p></label>
-            {isImporting && (<div className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center rounded-xl"><Loader2 className="w-8 h-8 animate-spin text-purple-400" /><p className="mt-2 text-sm">Importando y Mejorando...</p></div>)}
+            <label htmlFor="file-upload" className="flex flex-col items-center justify-center cursor-pointer"><UploadCloud className={`w-12 h-12 mb-3 ${isDragging ? 'text-purple-400' : 'text-slate-500'}`} /><p className="text-lg font-semibold">Añade Tus Primeras Canciones</p><p className="text-sm text-slate-400">Arrastra o haz clic para subir a tu librería</p></label>
+            {isImporting && (<div className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center rounded-xl">
+              <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+              <p className="mt-2 text-sm">Subiendo a tu Nube...</p>
+              {uploadProgress && uploadProgress.total > 0 && 
+                  <p className="mt-1 text-xs text-slate-400 w-full px-4 truncate">
+                      {uploadProgress.fileName ? `Subiendo: ${uploadProgress.fileName}` : 'Preparando...'} ({uploadProgress.current}/{uploadProgress.total})
+                  </p>
+              }
+            </div>)}
         </div>
      </div>
   );
@@ -116,20 +143,35 @@ const Library: React.FC<LibraryProps> = ({ activeDJ, onCreateShow, onManageDJs, 
             <div className="max-h-[60vh] overflow-y-auto pr-2">
                 <table className="w-full text-left text-sm">
                     <thead><tr className="border-b border-slate-700 text-slate-400"><th className="p-3 w-10"><input type="checkbox" onChange={handleSelectAll} checked={filteredSongs.length > 0 && selectedSongIds.size === filteredSongs.length} disabled={filteredSongs.length === 0}/></th><th className="p-3 w-16"></th><th className="p-3">Título / Artista</th><th className="p-3 hidden md:table-cell">Álbum</th><th className="p-3 hidden sm:table-cell">Año</th><th className="p-3 text-right">Dur.</th><th className="p-3 w-12"></th></tr></thead>
-                    <tbody>{filteredSongs.map(song => (<tr key={song.id} className={`border-b border-slate-800 hover:bg-slate-700/50 ${selectedSongIds.has(song.id) ? 'bg-purple-500/10' : ''}`}>
+                    <tbody>{filteredSongs.map(song => {
+                        const pictureUrl = song.metadata.picture 
+                            ? (song.metadata.picture.startsWith('http') || song.metadata.picture.startsWith('data:') ? song.metadata.picture : `data:image/jpeg;base64,${song.metadata.picture}`)
+                            : `https://ui-avatars.com/api/?name=${encodeURIComponent(song.metadata.title[0] || 'A')}&background=4338CA&color=fff`;
+                        
+                        return (<tr key={song.id} className={`border-b border-slate-800 hover:bg-slate-700/50 ${selectedSongIds.has(song.id) ? 'bg-purple-500/10' : ''}`}>
                         <td className="p-3"><input type="checkbox" onChange={() => handleSongSelection(song.id)} checked={selectedSongIds.has(song.id)}/></td>
-                        <td className="p-3"><img src={song.metadata.picture || `https://ui-avatars.com/api/?name=${song.metadata.title[0]}&background=4338CA&color=fff`} alt="album" className="w-10 h-10 rounded-md object-cover"/></td>
+                        <td className="p-3"><img src={pictureUrl} alt="album" className="w-10 h-10 rounded-md object-cover"/></td>
                         <td className="p-3 font-medium truncate max-w-xs">{song.metadata.title}<span className="block text-slate-400 font-normal">{song.metadata.artist}</span></td>
                         <td className="p-3 text-slate-300 hidden md:table-cell truncate max-w-xs">{song.metadata.album}</td>
                         <td className="p-3 text-slate-400 hidden sm:table-cell">{song.metadata.year || '-'}</td>
                         <td className="p-3 text-slate-400 text-right">{new Date(song.metadata.duration * 1000).toISOString().substr(14, 5)}</td>
                         <td className="p-3 text-center"><button onClick={() => setEditingSong(song)} className="p-2 rounded-full hover:bg-slate-700" aria-label={`Editar ${song.metadata.title}`}><Pencil size={16} /></button></td>
-                    </tr>))}</tbody>
+                    </tr>
+                    )})
+                    }</tbody>
                 </table>
                  <div onDrop={handleDrop} onDragOver={handleDragOver} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} className={`relative border-2 border-dashed rounded-xl p-4 text-center mt-4 ${isDragging ? 'border-purple-500 bg-purple-500/10' : 'border-slate-600'}`}>
                     <input type="file" id="file-upload-more" multiple accept="audio/*" onChange={(e) => e.target.files && handleFileDrop(Array.from(e.target.files))} className="absolute inset-0 opacity-0 cursor-pointer"/>
                      <label htmlFor="file-upload-more" className="flex items-center justify-center cursor-pointer text-sm text-slate-400 gap-2"><UploadCloud className={`w-5 h-5 ${isDragging ? 'text-purple-400' : 'text-slate-500'}`} />Añadir más canciones...</label>
-                    {isImporting && (<div className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center rounded-xl"><Loader2 className="w-6 h-6 animate-spin text-purple-400" /><p className="mt-2 text-sm">Importando...</p></div>)}
+                    {isImporting && (<div className="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center rounded-xl">
+                      <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                      <p className="mt-2 text-sm">Subiendo...</p>
+                      {uploadProgress && uploadProgress.total > 0 && 
+                          <p className="mt-1 text-xs text-slate-400 w-full px-4 truncate">
+                              {uploadProgress.fileName ? `${uploadProgress.fileName}` : 'Preparando...'} ({uploadProgress.current}/{uploadProgress.total})
+                          </p>
+                      }
+                    </div>)}
                 </div>
             </div>
         </div>

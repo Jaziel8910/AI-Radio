@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { CustomizationOptions, LibrarySong, ResidentDJ, Intention, TimeOfDay } from '../types';
 import { INTENTION_CONFIGS } from '../constants';
@@ -71,6 +72,7 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
             showPacing: 'medium',
             endingStyle: 'fade_out',
             soundEffectLevel: 'none',
+            contextualEventsLevel: baseOptions.contextualEventsLevel || 'subtle',
         };
     };
 
@@ -87,8 +89,8 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
         setOptions(prev => ({ ...prev, mood: { ...prev.mood, [key]: value } }));
     };
 
-    const handleAutomate = () => {
-        const automatedPrefs = personalizationService.getAutomatedOptions(intention);
+    const handleAutomate = async () => {
+        const automatedPrefs = await personalizationService.getAutomatedOptions(intention);
         if (automatedPrefs) {
             const currentShowContext = `Una sesión de ${songs.length} canciones con la intención de '${intention}'.`;
             const newOptions = { ...getInitialOptions(), ...automatedPrefs, showContext: currentShowContext };
@@ -101,9 +103,9 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
         }
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        personalizationService.saveUserPreferences(intention, options);
+        await personalizationService.saveUserPreferences(intention, options);
         onConfirm(songs, dj, options);
     };
 
@@ -139,6 +141,7 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
             <div className="grid grid-cols-2 gap-4">
                  <div><label className="block text-sm font-medium text-slate-300 mb-1">Frecuencia de Anuncios</label><select value={options.adFrequency} onChange={e => handleChange('adFrequency', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="none">Ninguna</option><option value="low">Baja</option><option value="medium">Media</option><option value="high">Alta</option></select></div>
                  <div><label className="block text-sm font-medium text-slate-300 mb-1">ID de la Estación</label><select value={options.stationIdentificationFrequency} onChange={e => handleChange('stationIdentificationFrequency', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="none">Nunca</option><option value="low">A veces</option><option value="high">Frecuente</option></select></div>
+                 <div><label className="block text-sm font-medium text-slate-300 mb-1">Eventos Contextuales</label><select value={options.contextualEventsLevel} onChange={e => handleChange('contextualEventsLevel', e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"><option value="none">Ninguno</option><option value="subtle">Sutil</option><option value="immersive">Inmersivo</option></select></div>
             </div>
             {options.adFrequency !== 'none' && <div><label className="block text-sm font-medium text-slate-300 mb-1">Anuncios Personalizados (uno por línea)</label><textarea value={options.customAds} onChange={e => handleChange('customAds', e.target.value)} rows={2} placeholder="Si está vacío, la IA los inventará." className="bg-slate-900 border border-slate-600 rounded-lg w-full p-2.5"/></div>}
             <div className="grid grid-cols-2 gap-4">
@@ -194,11 +197,12 @@ const CustomizationModal: React.FC<CustomizationModalProps> = ({ dj, songs, inte
                     {activeTab === 'visuals' && renderVisualsTab()}
                 </div>
 
-                <div className="p-6 flex justify-between items-center gap-3 border-t border-slate-700 bg-slate-800/50 rounded-b-2xl">
+                <div className="p-6 flex items-center gap-3 border-t border-slate-700 bg-slate-800/50 rounded-b-2xl">
                     <button type="button" onClick={handleAutomate} className="bg-slate-700/50 border border-slate-600 font-semibold py-2 px-4 rounded-lg hover:bg-slate-700 flex items-center gap-2 text-slate-300 hover:text-white transition-transform hover:scale-105">
                         <Wand2 size={18}/> Automatizar
                     </button>
-                    <div className="relative flex items-center gap-3">
+                    <div className="flex-grow" />
+                    <div className="flex items-center gap-3">
                         {automationNotice && <span className="text-sm text-purple-300 animate-[fade-in_0.3s]">{automationNotice}</span>}
                         <button type="button" onClick={onCancel} className="bg-slate-700 font-semibold py-2 px-4 rounded-lg hover:bg-slate-600">Cancelar</button>
                         <button type="submit" className="bg-purple-600 font-bold py-2 px-4 rounded-lg hover:bg-purple-500 flex items-center gap-2"><Check size={20}/> ¡Crear Show!</button>

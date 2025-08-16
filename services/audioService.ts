@@ -1,3 +1,4 @@
+
 import { SongMetadata } from '../types';
 
 const getDurationFromAudioElement = (file: File): Promise<number> => {

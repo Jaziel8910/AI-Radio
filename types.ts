@@ -1,5 +1,7 @@
 
 
+
+
 export type Intention = 'Automatic' | 'Focus' | 'Relax' | 'Celebrate' | 'Nostalgia' | 'Discover';
 
 export interface InitialMetadata {
@@ -17,15 +19,22 @@ export interface SongMetadata extends InitialMetadata {
 
 export interface LibrarySong {
   id: string; // from getSongId
-  file: File; // The actual file object
+  metadata: SongMetadata;
+  puterFsPath: string;
+  mimeType: string;
+}
+
+// A version of AnalyzedSong passed to Gemini, without the full file info.
+export interface GeminiAnalyzedSong {
+  index: number;
+  songId: string;
   metadata: SongMetadata;
 }
 
+// The version passed to the Player, with the full LibrarySong object.
 export interface AnalyzedSong {
   index: number;
-  songId: string; // Unique identifier for history tracking
-  fileUrl: string;
-  metadata: SongMetadata;
+  song: LibrarySong;
 }
 
 export type TimeOfDay = 'auto' | 'madrugada' | 'mañana' | 'tarde' | 'noche';
@@ -51,6 +60,7 @@ export interface CustomizationOptions {
   mood: { energy: number; vibe: number }; // -1 to 1 for both
   timeCapsuleYear: string;
   dataRichness: 'low' | 'medium' | 'high'; // NEW
+  contextualEventsLevel: 'none' | 'subtle' | 'immersive'; // NEW
   
   // DJ Style
   djBanterStyle: 'standard' | 'storyteller' | 'interviewer'; // NEW
@@ -101,7 +111,11 @@ export interface JingleItem {
   script: string;
 }
 
-export type PlaylistItem = SongItem | AdBreakItem | JingleItem;
+export interface JokeItem {
+  type: 'joke';
+}
+
+export type PlaylistItem = SongItem | AdBreakItem | JingleItem | JokeItem;
 
 export interface Source {
   uri: string;
@@ -161,6 +175,9 @@ export enum AppState {
   DJ_VAULT = 'DJ_VAULT',
   DJ_EDITOR = 'DJ_EDITOR',
   DJ_DIARY = 'DJ_DIARY',
+  SOCIAL_HUB = 'SOCIAL_HUB',
+  FRIENDS = 'FRIENDS',
+  PROFILE_SETTINGS = 'PROFILE_SETTINGS',
   CREATING_SHOW = 'CREATING_SHOW',
   SHOW_READY = 'SHOW_READY',
   PLAYING = 'PLAYING',
