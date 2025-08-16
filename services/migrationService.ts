@@ -2,6 +2,7 @@
 import { ResidentDJ, LibrarySong, ListeningHistory, DJDiaryEntry, CustomizationOptions, Intention } from '../types';
 import * as djService from './djService';
 import * as libraryService from './libraryService';
+import { clearSessionStore } from './sessionFileService';
 
 declare var puter: any;
 
@@ -96,7 +97,7 @@ interface BackupData {
     data: {
         djs: ResidentDJ[];
         activeDJId: string | null;
-        library: LibrarySong[];
+        library: LibrarySong[]; // Metadata only
         history: ListeningHistory;
         diaries: Record<string, DJDiaryEntry[]>;
         preferences: Record<string, Partial<CustomizationOptions>>;
@@ -129,7 +130,7 @@ export const exportUserData = async (): Promise<BackupData> => {
     }
 
     return {
-        version: "1.2-puter-fs",
+        version: "1.3-local-playback",
         exportedAt: new Date().toISOString(),
         data: { djs, activeDJId, library, history, diaries, preferences }
     };
@@ -141,24 +142,21 @@ export const importUserData = async (backup: BackupData): Promise<void> => {
     if (!backup || !backup.version || !backup.data) {
         throw new Error("Invalid or incompatible backup file.");
     }
-    if (backup.version !== "1.2-puter-fs") {
-        throw new Error("Backup file is from an old/incompatible version. Only v1.2-puter-fs is supported.");
+    if (backup.version !== "1.3-local-playback") {
+        throw new Error("Backup file is from an old/incompatible version. Only v1.3-local-playback is supported.");
     }
 
+    // Clear session store to avoid conflicts with imported data
+    clearSessionStore();
 
     const { djs, activeDJId, library, history, diaries, preferences } = backup.data;
     
-    // Clear existing remote audio files before importing new metadata
-    const currentLibrary = await libraryService.getAllSongs();
-    for (const song of currentLibrary) {
-        if (song.puterFsPath) {
-           await puter.fs.del(song.puterFsPath).catch((e: any) => console.error(`Failed to delete old file ${song.puterFsPath}`, e));
-        }
-    }
+    // Clear existing data before import
+    await deleteAllUserData();
 
     await djService.saveDJs(djs);
     await djService.setActiveDJId(activeDJId);
-    await puter.kv.set('aiRadioSongLibrary_v3', library);
+    await puter.kv.set('aiRadioSongLibrary_v4_local', library);
     await puter.kv.set('aiRadioListeningHistory', history);
 
     for (const [djId, entries] of Object.entries(diaries)) {
@@ -175,17 +173,11 @@ export const deleteAllUserData = async (): Promise<void> => {
 
     console.log("Borrando todos los datos de usuario de AI Radio...");
 
-    // 1. Delete audio files from Puter FS
-    const library = await libraryService.getAllSongs();
-    for (const song of library) {
-        if(song.puterFsPath) {
-            await puter.fs.del(song.puterFsPath).catch((e: any) => console.error(`Error borrando archivo de FS ${song.puterFsPath}:`, e));
-        }
-    }
-    console.log("Archivos de audio de Puter FS borrados.");
+    // 1. Clear in-memory session data
+    clearSessionStore();
+    console.log("Almacén de sesión en memoria limpiado.");
 
-
-    // 2. Borrar datos de Puter KV
+    // 2. Delete data from Puter KV
     const djs = await djService.getDJs();
     for (const dj of djs) {
         await puter.kv.del(`aiRadioDJDiary_${dj.id}`);
@@ -198,7 +190,7 @@ export const deleteAllUserData = async (): Promise<void> => {
     }
     console.log("Preferencias borradas.");
     
-    await puter.kv.del('aiRadioSongLibrary_v3');
+    await puter.kv.del('aiRadioSongLibrary_v4_local');
     await puter.kv.del('aiRadioDJs');
     await puter.kv.del('aiRadioActiveDJId');
     await puter.kv.del('aiRadioListeningHistory');

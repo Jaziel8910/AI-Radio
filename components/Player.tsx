@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { AnalyzedSong, RadioShow, AppState, PlaylistItem, SongItem, Genre, Source, CustomizationOptions, ResidentDJ, LibrarySong } from '../types';
 import { Play, Pause, MoreVertical, ThumbsUp, ThumbsDown, Share2, Maximize, X, FileText, Minimize, LoaderCircle, Volume2, Volume1, VolumeX, BookOpen, Clock, Radio } from 'lucide-react';
 import { logSongPlay, logSongFinish, logSongFavorite, logSongSkip, logSongDislike } from '../services/historyService';
+import { getFileFromSessionStore } from '../services/sessionFileService';
 import { getLyrics } from '../services/geminiService';
 import { generateAndSavePostShowEntry } from '../services/diaryService';
 import { getARandomJoke } from '../services/contextService';
@@ -148,48 +149,52 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
       const audio = audioElementRef.current;
       if (!audio) return Promise.resolve();
 
-      try {
-        const streamUrl = await puter.fs.getLink(song.puterFsPath);
-        if (!streamUrl) {
-            throw new Error(`Could not get stream URL for ${song.puterFsPath}`);
-        }
-
-        return new Promise((resolve) => {
-            currentSongUrlRef.current = streamUrl;
-            audio.src = streamUrl;
-            audio.volume = 0;
-            const playPromise = audio.play();
-            
-            playPromise.then(() => {
-                logSongPlay(song.id);
-                animateVolume(isMuted ? 0 : volume, FADE_TIME);
-                setPlayerStatus(PlayerStatus.PLAYING);
-                setAppState(AppState.PLAYING);
-
-                const handleEnd = async () => {
-                    audio.removeEventListener('ended', handleEnd);
-                    logSongFinish(song.id);
-                    cancellationRef.current = null;
-                    resolve();
-                };
-                audio.addEventListener('ended', handleEnd);
-                
-                cancellationRef.current = () => {
-                    audio.removeEventListener('ended', handleEnd);
-                    try { audio.pause(); } catch(e) { /* ignore */ }
-                    resolve();
-                };
-            }).catch(error => {
-                console.error("Error playing song:", error);
-                speak(`Hubo un problema al reproducir "${song.metadata.title}". Saltando a la siguiente.`, true);
-                resolve();
-            });
-        });
-      } catch(error) {
-         console.error("Failed to get song from Puter FS:", error);
-         speak(`No se pudo cargar "${song.metadata.title}" desde tu librería.`, true);
-         return Promise.resolve();
+      // Revoke the previous song's URL to free up memory
+      if (currentSongUrlRef.current) {
+          URL.revokeObjectURL(currentSongUrlRef.current);
+          currentSongUrlRef.current = null;
       }
+
+      const file = getFileFromSessionStore(song.id);
+
+      if (!file) {
+          console.warn(`Audio file for song ID ${song.id} not found in session store.`);
+          speak(`No se pudo encontrar el archivo de audio para "${song.metadata.title}". Por favor, recarga tus archivos en la librería. Saltando a la siguiente.`, true);
+          return Promise.resolve();
+      }
+
+      return new Promise((resolve) => {
+          const objectUrl = URL.createObjectURL(file);
+          currentSongUrlRef.current = objectUrl;
+          audio.src = objectUrl;
+          audio.volume = 0;
+          const playPromise = audio.play();
+
+          playPromise.then(() => {
+              logSongPlay(song.id);
+              animateVolume(isMuted ? 0 : volume, FADE_TIME);
+              setPlayerStatus(PlayerStatus.PLAYING);
+              setAppState(AppState.PLAYING);
+
+              const handleEnd = async () => {
+                  audio.removeEventListener('ended', handleEnd);
+                  logSongFinish(song.id);
+                  cancellationRef.current = null;
+                  resolve();
+              };
+              audio.addEventListener('ended', handleEnd);
+
+              cancellationRef.current = () => {
+                  audio.removeEventListener('ended', handleEnd);
+                  try { audio.pause(); } catch (e) { /* ignore */ }
+                  resolve();
+              };
+          }).catch(error => {
+              console.error("Error playing song:", error);
+              speak(`Hubo un problema al reproducir "${song.metadata.title}". Saltando a la siguiente.`, true);
+              resolve();
+          });
+      });
   }, [cleanupCurrentTask, volume, isMuted, setAppState, setPlayerStatus, speak]);
 
 
@@ -363,6 +368,9 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
     return () => { 
         cleanupCurrentTask(); 
         if(sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+        if (currentSongUrlRef.current) {
+            URL.revokeObjectURL(currentSongUrlRef.current);
+        }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

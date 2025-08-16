@@ -20,8 +20,6 @@ export interface SongMetadata extends InitialMetadata {
 export interface LibrarySong {
   id: string; // from getSongId
   metadata: SongMetadata;
-  puterFsPath: string;
-  mimeType: string;
 }
 
 // A version of AnalyzedSong passed to Gemini, without the full file info.

@@ -4,18 +4,16 @@ import { LibrarySong } from '../types';
 import { extractInitialMetadata } from './audioService';
 import { getSongId } from './historyService';
 import { enhanceSongsMetadata, SongForEnhancement } from './geminiService';
+import * as sessionFileService from './sessionFileService';
 
 declare var puter: any;
 
-const LIBRARY_KV_KEY = 'aiRadioSongLibrary_v3';
-const LIBRARY_FS_PATH = '/ai-radio/library/';
+const LIBRARY_KV_KEY = 'aiRadioSongLibrary_v4_local';
 
-const isPuterReady = () => typeof puter !== 'undefined' && puter.kv && puter.fs;
+const isPuterReady = () => typeof puter !== 'undefined' && puter.kv;
 
 export async function addSongs(files: File[], onProgress?: (progress: { current: number, total: number, fileName: string }) => void): Promise<void> {
     if (!isPuterReady()) throw new Error("Puter is not available.");
-
-    await puter.fs.mkdir(LIBRARY_FS_PATH).catch((e: any) => { /* Fails silently if dir exists */ });
 
     const library: LibrarySong[] = await getAllSongs();
     const existingIds = new Set(library.map(s => s.id));
@@ -24,6 +22,8 @@ export async function addSongs(files: File[], onProgress?: (progress: { current:
     if (newFiles.length === 0) {
       console.log('All dropped songs are already in the library.');
       onProgress?.({ current: files.length, total: files.length, fileName: ""});
+      // Activate existing files in session store
+      files.forEach(file => sessionFileService.addFileToSessionStore(getSongId(file), file));
       return;
     }
 
@@ -48,20 +48,13 @@ export async function addSongs(files: File[], onProgress?: (progress: { current:
         const song = enhancedSongs[i];
         onProgress?.({ current: i + 1, total: enhancedSongs.length, fileName: song.file.name });
         
-        const safeFileName = song.id.replace(/[^a-zA-Z0-9.-_]/g, '_');
-        const fsPath = `${LIBRARY_FS_PATH}${safeFileName}`;
+        // Add file to in-memory session store for playback
+        sessionFileService.addFileToSessionStore(song.id, song.file);
 
-        try {
-            await puter.fs.write(fsPath, song.file);
-            newLibrarySongs.push({
-                id: song.id,
-                metadata: song.metadata,
-                puterFsPath: fsPath,
-                mimeType: song.file.type || 'audio/mpeg',
-            });
-        } catch (uploadError) {
-            console.error(`Failed to upload ${song.file.name} to Puter FS:`, uploadError);
-        }
+        newLibrarySongs.push({
+            id: song.id,
+            metadata: song.metadata,
+        });
     }
     
     const updatedLibrary = [...library, ...newLibrarySongs];
@@ -93,12 +86,10 @@ export async function deleteSongs(songIds: string[]): Promise<void> {
     const library = await getAllSongs();
     const idsToDelete = new Set(songIds);
     
-    const songsToDelete = library.filter(s => idsToDelete.has(s.id));
     const updatedLibrary = library.filter(s => !idsToDelete.has(s.id));
 
-    await Promise.all(songsToDelete.map(song => 
-        puter.fs.del(song.puterFsPath).catch((e: any) => console.error(`Failed to delete ${song.puterFsPath} from Puter FS`, e))
-    ));
+    // Remove from session store as well
+    songIds.forEach(id => sessionFileService.removeFileFromSessionStore(id));
     
     await puter.kv.set(LIBRARY_KV_KEY, updatedLibrary);
 }
