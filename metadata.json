@@ -1,0 +1,6 @@
+{
+  "name": "AI Radio — Tu DJ con Cerebro Real",
+  "description": "AI Radio transforma tu biblioteca de música local en una experiencia de radio hablada, personalizada e inteligente. Sube tus canciones, personaliza tu DJ, añade pausas publicitarias, y una IA creará una sesión única con comentarios, datos curiosos obtenidos de la web, y un orden narrativo, como si fuera una estación de radio real con cerebro propio.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

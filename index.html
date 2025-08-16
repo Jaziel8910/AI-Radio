@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Radio — Tu Escenario Sonoro Personal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+      
+      .progress-bar {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 99px;
+        outline: none;
+        transition: background 0.3s;
+      }
+      .progress-bar::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        cursor: pointer;
+        border-radius: 50%;
+        margin-top: -6px; /* Center thumb */
+        transition: transform 0.2s ease;
+      }
+      .progress-bar:hover::-webkit-slider-thumb {
+        transform: scale(1.1);
+      }
+      .progress-bar::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        cursor: pointer;
+        border-radius: 50%;
+        border: none;
+      }
+       .progress-bar:hover::-moz-range-thumb {
+        transform: scale(1.1);
+      }
+      .line-clamp-2 {
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+      .toggle-switch:checked {
+        background-color: #7c3aed; /* purple-600 */
+        border-color: #7c3aed;
+      }
+      .toggle-switch:checked::after {
+        transform: translateX(100%);
+        border-color: white;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.11.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.526.0",
+    "music-metadata": "https://esm.sh/music-metadata@^8.1.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-slate-900 text-slate-200">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
