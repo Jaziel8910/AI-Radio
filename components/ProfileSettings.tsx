@@ -1,10 +1,10 @@
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, User, ChevronRight, Edit, BookOpen, Users, Upload, Download, AlertTriangle, Save, LoaderCircle, Camera, Trash2, SlidersHorizontal, Info, Settings, RefreshCw } from 'lucide-react';
 import { AppState, ResidentDJ, AppSettings, Intention } from '../types';
 import * as userService from '../services/userService';
 import * as migrationService from '../services/migrationService';
+import { useAppSettings } from '../App';
 
 declare var puter: any;
 
@@ -18,9 +18,6 @@ interface ProfileSettingsProps {
     onEditDJ: (dj: ResidentDJ) => void;
     onImport: () => void;
     onExportAll: () => void;
-    appSettings: AppSettings;
-    onSaveSettings: (settings: AppSettings) => void;
-    onResetSettings: () => void;
 }
 
 const SettingsCard = ({ children }: { children: React.ReactNode }) => (
@@ -41,11 +38,16 @@ const Toggle = ({ label, checked, onChange, description }: { label: string, chec
     </div>
 );
 
-const AppSettingsCard = ({ appSettings, onSaveSettings, onResetSettings }: { appSettings: AppSettings, onSaveSettings: (s: AppSettings) => void, onResetSettings: () => void }) => {
+const AppSettingsCard = () => {
+    const { settings: appSettings, saveSettings: onSaveSettings, resetSettings: onResetSettings, isLoading } = useAppSettings();
     const [settings, setSettings] = useState<AppSettings>(appSettings);
     const [activeTab, setActiveTab] = useState('general');
 
     useEffect(() => { setSettings(appSettings); }, [appSettings]);
+    
+    if (isLoading) {
+        return <SettingsCard><LoaderCircle className="w-8 h-8 animate-spin text-purple-400 mx-auto" /></SettingsCard>
+    }
 
     const handleChange = (key: keyof AppSettings, value: any) => setSettings(prev => ({ ...prev, [key]: value }));
     const handleSave = () => onSaveSettings(settings);
@@ -236,7 +238,7 @@ const DeleteDataModal = ({ username, onConfirm, onCancel }: { username: string, 
     );
 };
 
-const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onBack, user, setUser, onLogout, activeDJ, setAppState, onEditDJ, onImport, onExportAll, appSettings, onSaveSettings, onResetSettings }) => {
+const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onBack, user, setUser, onLogout, activeDJ, setAppState, onEditDJ, onImport, onExportAll }) => {
     const [isProfileModalOpen, setProfileModalOpen] = useState(false);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -331,7 +333,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({ onBack, user, setUser
                 <div className="space-y-6">
                     {renderProfile()}
                     {renderDJSettings()}
-                    <AppSettingsCard appSettings={appSettings} onSaveSettings={onSaveSettings} onResetSettings={onResetSettings} />
+                    <AppSettingsCard />
                     {renderAccountSettings()}
                 </div>
             </div>

@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { ResidentDJ, DJPersona, DJDNA } from '../types';
 import { DJ_PERSONAS, PUTER_LANGUAGES } from '../constants';
@@ -45,8 +44,8 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
     };
 
     const testVoice = async () => {
-        if (typeof puter === 'undefined' || !puter.ai || !puter.ai.txt2speech) {
-            alert("Puter.js no está disponible. Asegúrate de que estás conectado a internet y que el script se ha cargado correctamente.");
+        if (typeof puter === 'undefined' || !puter.ai?.txt2speech) {
+            alert("El motor de voz de Puter no está disponible. Revisa la conexión.");
             return;
         }
         setIsTestingVoice(true);
@@ -57,48 +56,17 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
                 language: voiceLanguage,
                 engine: 'generative',
             });
-    
-            // Wrap playback in a promise to await its completion
-            await new Promise<void>((resolve, reject) => {
-                audio.onended = () => resolve();
-                audio.onerror = () => reject(new Error("Error al reproducir el archivo de audio."));
-                audio.play().catch(reject);
-            });
-    
-        } catch (err: any) {
-            let errorDetails = "Ocurrió un error desconocido.";
             
-            // Log the raw error to the console for debugging
-            console.error("Error al probar la voz (raw):", err);
+            await audio.play();
 
-            if (err instanceof Error) {
-                // For DOMException and other Error types
-                errorDetails = `${err.name}: ${err.message}`;
-            } else if (err && typeof err === 'object') {
-                // For other objects, try to extract a message or stringify
-                if (err.message) {
-                    errorDetails = String(err.message);
-                } else {
-                    try {
-                        errorDetails = JSON.stringify(err);
-                    } catch (e) {
-                        errorDetails = "El objeto de error no se puede mostrar (posiblemente una referencia circular).";
-                    }
-                }
-            } else if (err) {
-                // For primitive types
-                errorDetails = String(err);
+        } catch (err) {
+            console.error("Error al probar la voz:", err);
+            let userMessage = "No se pudo generar la muestra de voz.";
+            if (err instanceof Error && err.name === 'NotAllowedError') {
+                userMessage += "\n\nEl navegador bloqueó la reproducción. Por favor, haz clic en cualquier lugar de la página y vuelve a intentarlo.";
+            } else if (err instanceof Error) {
+                userMessage += `\nDetalles: ${err.message}`;
             }
-            
-            let userMessage = `No se pudo generar la muestra de voz.\nDetalles: ${errorDetails}`;
-
-            // Add specific advice for common errors
-            if (err?.name === 'NotAllowedError' || (typeof errorDetails === 'string' && errorDetails.includes('NotAllowedError'))) {
-                userMessage += "\n\nSugerencia: El navegador bloqueó la reproducción automática. Por favor, interactúa con la página (haz clic en cualquier lugar) y vuelve a intentarlo.";
-            } else if (typeof errorDetails === 'string' && errorDetails.toLowerCase().includes('failed to fetch')) {
-                userMessage += "\n\nSugerencia: Este error ('Failed to fetch') suele indicar un problema de red o permisos (CORS). Asegúrate de tener conexión a internet y que la aplicación se ejecuta en un entorno compatible (como Puter OS).";
-            }
-            
             alert(userMessage);
         } finally {
             setIsTestingVoice(false);

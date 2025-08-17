@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { PlayCircle } from 'lucide-react';
 
@@ -33,6 +32,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       >
         Iniciar Sesión / Registrarse con Puter
       </button>
+       <div className="mt-6 text-sm text-slate-400">
+        ¿Ya eres usuario? <a href="#" onClick={(e) => { e.preventDefault(); handleSignIn(); }} className="font-semibold text-purple-400 hover:text-purple-300">Inicia sesión aquí</a>.
+      </div>
     </div>
   );
 };

@@ -1,35 +1,75 @@
 
-
-import React, { useState } from 'react';
-import { ArrowLeft, Send, LoaderCircle } from 'lucide-react';
-import { moderateContent } from '../services/geminiService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ArrowLeft, Send, LoaderCircle, Heart } from 'lucide-react';
+import * as socialService from '../services/socialService';
 
 interface SocialHubProps {
+    user: any;
     onBack: () => void;
 }
 
-const SocialHub: React.FC<SocialHubProps> = ({ onBack }) => {
+const PostCard: React.FC<{ post: socialService.Post }> = ({ post }) => {
+    const timeAgo = (date: string) => {
+        const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000);
+        let interval = seconds / 31536000;
+        if (interval > 1) return `hace ${Math.floor(interval)} años`;
+        interval = seconds / 2592000;
+        if (interval > 1) return `hace ${Math.floor(interval)} meses`;
+        interval = seconds / 86400;
+        if (interval > 1) return `hace ${Math.floor(interval)} días`;
+        interval = seconds / 3600;
+        if (interval > 1) return `hace ${Math.floor(interval)} horas`;
+        interval = seconds / 60;
+        if (interval > 1) return `hace ${Math.floor(interval)} min`;
+        return 'justo ahora';
+    };
+
+    return (
+        <div className="bg-slate-900/70 p-4 rounded-xl border border-slate-700 flex gap-4">
+            <img src={post.authorAvatar} alt="avatar" className="w-10 h-10 rounded-full flex-shrink-0" />
+            <div className="flex-grow">
+                <div className="flex items-center gap-2">
+                    <span className="font-bold text-white">{post.authorUsername}</span>
+                    <span className="text-xs text-slate-500">&bull; {timeAgo(post.timestamp)}</span>
+                </div>
+                <p className="text-slate-300 mt-1 whitespace-pre-wrap">{post.content}</p>
+            </div>
+        </div>
+    );
+};
+
+
+const SocialHub: React.FC<SocialHubProps> = ({ user, onBack }) => {
     const [postContent, setPostContent] = useState('');
+    const [posts, setPosts] = useState<socialService.Post[]>([]);
     const [isPosting, setIsPosting] = useState(false);
-    const [moderationResult, setModerationResult] = useState('');
+    const [isLoadingFeed, setIsLoadingFeed] = useState(true);
+    const [error, setError] = useState('');
+
+    const fetchPosts = useCallback(async () => {
+        setIsLoadingFeed(true);
+        const fetchedPosts = await socialService.getPosts();
+        setPosts(fetchedPosts);
+        setIsLoadingFeed(false);
+    }, []);
+
+    useEffect(() => {
+        fetchPosts();
+    }, [fetchPosts]);
 
     const handlePost = async () => {
         if (!postContent.trim()) return;
         setIsPosting(true);
-        setModerationResult('');
+        setError('');
         try {
-            const result = await moderateContent(postContent);
-            setModerationResult(`Resultado de la moderación: ${result}`);
-            if (result === 'TRUE' || result === 'WARNING') {
-                // In a real app, you would submit the post here
-                alert("¡Publicación enviada! (Simulación)");
+            const newPost = await socialService.addPost(user, postContent);
+            if (newPost) {
+                setPosts(prev => [newPost, ...prev]);
                 setPostContent('');
-            } else {
-                 alert("Tu publicación fue rechazada por el moderador de IA.");
             }
-        } catch (error) {
-            console.error(error);
-            setModerationResult('Error al moderar el contenido.');
+        } catch (err) {
+            console.error(err);
+            setError(err instanceof Error ? err.message : 'No se pudo publicar.');
         } finally {
             setIsPosting(false);
         }
@@ -61,10 +101,24 @@ const SocialHub: React.FC<SocialHubProps> = ({ onBack }) => {
                         </button>
                     </div>
                 </div>
-                {moderationResult && <p className="text-center text-sm mt-4 text-slate-400 animate-pulse">{moderationResult}</p>}
-                <div className="mt-8 text-center text-slate-500 border-t border-slate-700 pt-6">
-                    <h3 className="text-lg font-semibold">Feed de la Comunidad</h3>
-                    <p>El feed de la comunidad y las publicaciones de otros usuarios aparecerán aquí pronto.</p>
+                {error && <p className="text-center text-sm mt-4 text-red-400">{error}</p>}
+                
+                <div className="mt-8 border-t border-slate-700 pt-6">
+                    <h3 className="text-lg font-semibold mb-4">Feed de la Comunidad</h3>
+                    {isLoadingFeed ? (
+                        <div className="flex justify-center items-center py-10">
+                            <LoaderCircle className="w-8 h-8 animate-spin text-purple-400" />
+                        </div>
+                    ) : posts.length > 0 ? (
+                        <div className="space-y-4">
+                            {posts.map(post => <PostCard key={post.id} post={post} />)}
+                        </div>
+                    ) : (
+                        <div className="text-center py-10 text-slate-500">
+                           <p>¡El feed está muy tranquilo!</p>
+                           <p className="text-sm">Sé el primero en publicar algo.</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

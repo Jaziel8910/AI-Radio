@@ -12,6 +12,7 @@ declare var puter: any;
 
 const FADE_INTERVAL = 50; // ms
 const FADE_TIME = 1000; // ms
+const MUSIC_DUCK_VOLUME = 0.3;
 
 enum PlayerStatus { LOADING, SPEAKING, PLAYING, ENDED }
 
@@ -31,7 +32,6 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [favoritedSongs, setFavoritedSongs] = useState<Set<string>>(new Set());
-  const [isTransitioning, setIsTransitioning] = useState(false);
   const [volume, setVolume] = useState(0.75);
   const [isMuted, setIsMuted] = useState(false);
   const [isLyricsVisible, setIsLyricsVisible] = useState(false);
@@ -39,9 +39,9 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   const [sleepTimer, setSleepTimer] = useState<number | null>(null);
   const [isClosing, setIsClosing] = useState(false);
   
-  const audioElementRef = useRef<HTMLAudioElement>(null);
-  const currentSongUrlRef = useRef<string | null>(null);
-
+  const speechAudioRef = useRef<HTMLAudioElement>(null);
+  const musicAudioRef = useRef<HTMLAudioElement>(null);
+  const musicObjectUrlRef = useRef<string | null>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const cancellationRef = useRef<(() => void) | null>(null);
   const lastVolumeRef = useRef(volume);
@@ -49,16 +49,8 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
 
   const currentPlaylistItem = playlistIndex >= 0 && playlistIndex < show.playlist.length ? show.playlist[playlistIndex] : null;
   const currentSongItem = currentPlaylistItem?.type === 'song' ? currentPlaylistItem as SongItem : null;
-  const currentAnalyzedSong = currentSongItem ? songs.find(s => s.index === currentSongItem.songIndex) : null;
-  const currentSong = currentAnalyzedSong?.song || null;
+  const currentSong = currentSongItem ? songs.find(s => s.index === currentSongItem.songIndex)?.song : null;
   const isSongFavorited = currentSong ? favoritedSongs.has(currentSong.id) : false;
-
-  const setPlayerStatus = useCallback((newStatus: PlayerStatus) => {
-    if (newStatus === PlayerStatus.PLAYING || newStatus === PlayerStatus.SPEAKING) {
-        setIsTransitioning(false);
-    }
-    setStatus(newStatus);
-  }, []);
 
   const cleanupCurrentTask = useCallback(() => {
     if (cancellationRef.current) {
@@ -67,23 +59,22 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
     }
   }, []);
   
-  const animateVolume = (targetVolume: number, duration: number, onComplete?: () => void) => {
-      const audio = audioElementRef.current;
-      if (!audio) return;
+  const animateVolume = (audioElement: HTMLAudioElement, targetVolume: number, duration: number, onComplete?: () => void) => {
+      if (!audioElement) return;
       
-      const startVolume = audio.volume;
-      const steps = duration / FADE_INTERVAL;
+      const startVolume = audioElement.volume;
+      const steps = Math.max(1, duration / FADE_INTERVAL);
       const volumeStep = (targetVolume - startVolume) / steps;
       let currentStep = 0;
       
       const fadeInterval = setInterval(() => {
           if (currentStep >= steps) {
               clearInterval(fadeInterval);
-              audio.volume = targetVolume;
+              audioElement.volume = targetVolume;
               if (onComplete) onComplete();
               return;
           }
-          audio.volume += volumeStep;
+          audioElement.volume = Math.max(0, Math.min(1, audioElement.volume + volumeStep));
           currentStep++;
       }, FADE_INTERVAL);
   };
@@ -93,22 +84,31 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
     if (!text?.trim()) return;
 
     return new Promise((resolve, reject) => {
-        if (!isInterruptible) setPlayerStatus(PlayerStatus.SPEAKING);
+        if (!isInterruptible) setStatus(PlayerStatus.SPEAKING);
         setCurrentCommentary(text);
 
         const puterOptions = { language: dj.voiceLanguage || 'es-ES', engine: dj.voiceEngine || 'generative' };
-
+        
         puter.ai.txt2speech(text, puterOptions).then((ttsAudio: HTMLAudioElement) => {
-            const mainAudio = audioElementRef.current;
-            if (!mainAudio) {
-                console.error("El elemento de audio principal no existe. No se puede hablar.");
-                resolve(); // Resolve to not block the show flow
+            const speechEl = speechAudioRef.current;
+            const musicEl = musicAudioRef.current;
+            if (!speechEl) {
+                console.error("Speech audio element not found.");
+                resolve();
                 return;
             }
             
+            const originalMusicVolume = isMuted ? 0 : volume;
+            if (musicEl && !musicEl.paused && !isInterruptible) {
+                animateVolume(musicEl, originalMusicVolume * MUSIC_DUCK_VOLUME, FADE_TIME / 2);
+            }
+
             const handleEnd = () => {
-                mainAudio.removeEventListener('ended', handleEnd);
-                mainAudio.removeEventListener('error', handleError);
+                speechEl.removeEventListener('ended', handleEnd);
+                speechEl.removeEventListener('error', handleError);
+                if (musicEl && !isInterruptible) {
+                    animateVolume(musicEl, originalMusicVolume, FADE_TIME / 2);
+                }
                 if (!isInterruptible) {
                     cancellationRef.current = null;
                     setCurrentCommentary('');
@@ -117,77 +117,70 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
             };
             
             const handleError = (e: Event) => {
-                console.error("Error al reproducir el audio del DJ:", e);
-                mainAudio.removeEventListener('ended', handleEnd);
-                mainAudio.removeEventListener('error', handleError);
-                // Resolvemos igualmente para no bloquear el show
-                resolve();
+                console.error("Error playing speech audio:", e);
+                handleEnd();
             };
 
-            mainAudio.addEventListener('ended', handleEnd);
-            mainAudio.addEventListener('error', handleError);
+            speechEl.addEventListener('ended', handleEnd);
+            speechEl.addEventListener('error', handleError);
 
-            mainAudio.src = ttsAudio.src;
-            mainAudio.volume = isMuted ? 0 : volume;
-            mainAudio.play().catch(handleError);
+            speechEl.src = ttsAudio.src;
+            speechEl.volume = isMuted ? 0 : volume;
+            speechEl.play().catch(handleError);
             
             if (!isInterruptible) {
                 cancellationRef.current = () => {
-                    if (mainAudio) { mainAudio.pause(); mainAudio.src = ''; }
+                    if (speechEl) { speechEl.pause(); speechEl.src = ''; }
                     handleEnd();
                 };
             }
         }).catch((err: any) => {
-            console.error("Error en la generación de voz de Puter:", err);
+            console.error("Puter TTS generation failed:", err);
             reject(err);
         });
     });
-}, [cleanupCurrentTask, setPlayerStatus, dj.voiceLanguage, dj.voiceEngine, isMuted, volume]);
+  }, [cleanupCurrentTask, dj.voiceLanguage, dj.voiceEngine, isMuted, volume]);
 
-  
   const playSong = useCallback(async (song: LibrarySong): Promise<void> => {
       cleanupCurrentTask();
-      const audio = audioElementRef.current;
-      if (!audio) return Promise.resolve();
+      const musicEl = musicAudioRef.current;
+      if (!musicEl) return Promise.resolve();
 
-      // Revoke the previous song's URL to free up memory
-      if (currentSongUrlRef.current) {
-          URL.revokeObjectURL(currentSongUrlRef.current);
-          currentSongUrlRef.current = null;
+      if (musicObjectUrlRef.current) {
+          URL.revokeObjectURL(musicObjectUrlRef.current);
+          musicObjectUrlRef.current = null;
       }
 
       const file = getFileFromSessionStore(song.id);
-
       if (!file) {
-          console.warn(`Audio file for song ID ${song.id} not found in session store.`);
-          speak(`No se pudo encontrar el archivo de audio para "${song.metadata.title}". Por favor, recarga tus archivos en la librería. Saltando a la siguiente.`, true);
+          await speak(`No se pudo encontrar el archivo de audio para "${song.metadata.title}". Saltando a la siguiente.`, true);
           return Promise.resolve();
       }
 
       return new Promise((resolve) => {
           const objectUrl = URL.createObjectURL(file);
-          currentSongUrlRef.current = objectUrl;
-          audio.src = objectUrl;
-          audio.volume = 0;
-          const playPromise = audio.play();
+          musicObjectUrlRef.current = objectUrl;
+          musicEl.src = objectUrl;
+          musicEl.volume = 0;
+          const playPromise = musicEl.play();
 
           playPromise.then(() => {
               logSongPlay(song.id);
-              animateVolume(isMuted ? 0 : volume, FADE_TIME);
-              setPlayerStatus(PlayerStatus.PLAYING);
+              animateVolume(musicEl, isMuted ? 0 : volume, FADE_TIME);
+              setStatus(PlayerStatus.PLAYING);
               setAppState(AppState.PLAYING);
 
               const handleEnd = async () => {
-                  audio.removeEventListener('ended', handleEnd);
-                  logSongFinish(song.id);
+                  musicEl.removeEventListener('ended', handleEnd);
+                  await logSongFinish(song.id);
                   cancellationRef.current = null;
                   resolve();
               };
-              audio.addEventListener('ended', handleEnd);
+              musicEl.addEventListener('ended', handleEnd);
 
               cancellationRef.current = () => {
-                  audio.removeEventListener('ended', handleEnd);
-                  try { audio.pause(); } catch (e) { /* ignore */ }
+                  musicEl.removeEventListener('ended', handleEnd);
+                  try { animateVolume(musicEl, 0, FADE_TIME / 2, () => musicEl.pause()); } catch (e) { /* ignore */ }
                   resolve();
               };
           }).catch(error => {
@@ -196,20 +189,19 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
               resolve();
           });
       });
-  }, [cleanupCurrentTask, volume, isMuted, setAppState, setPlayerStatus, speak]);
+  }, [cleanupCurrentTask, volume, isMuted, setAppState, speak]);
 
-
-  const advancePlaylist = useCallback((nextIndex: number) => {
+  const advancePlaylist = useCallback(() => {
     cleanupCurrentTask();
-    setLyrics({ text: null, isLoading: false }); // Reset lyrics for next song
-    setPlaylistIndex(nextIndex);
+    setLyrics({ text: null, isLoading: false });
+    setPlaylistIndex(prev => prev + 1);
   }, [cleanupCurrentTask]);
 
   const fadeOutAndExecute = (callback: () => void) => {
-      const audio = audioElementRef.current;
-      if (status === PlayerStatus.PLAYING && audio && !audio.paused) {
-          animateVolume(0, FADE_TIME, () => {
-              audio.pause();
+      const musicEl = musicAudioRef.current;
+      if (status === PlayerStatus.PLAYING && musicEl && !musicEl.paused) {
+          animateVolume(musicEl, 0, FADE_TIME, () => {
+              musicEl.pause();
               callback();
           });
       } else {
@@ -218,12 +210,11 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   }
 
   const handleDislike = async () => {
-    if (isTransitioning || status === PlayerStatus.ENDED || !currentSong) return;
-    setIsTransitioning(true);
+    if (status === PlayerStatus.ENDED || !currentSong) return;
     if(show.userReactions?.onSkip) speak(show.userReactions.onSkip, true);
     await logSongDislike(currentSong.id);
     await logSongSkip(currentSong.id);
-    fadeOutAndExecute(() => advancePlaylist(playlistIndex + 1));
+    fadeOutAndExecute(advancePlaylist);
   };
   
   const handleFavorite = useCallback(async () => { if(currentSong) { if(show.userReactions?.onFavorite) speak(show.userReactions.onFavorite, true); await logSongFavorite(currentSong.id); setFavoritedSongs(prev => new Set(prev).add(currentSong.id)); } }, [currentSong, show.userReactions, speak]);
@@ -291,9 +282,12 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   const handleClose = async () => {
       if(isClosing) return;
       setIsClosing(true);
+      cleanupCurrentTask();
+      if(speechAudioRef.current) { speechAudioRef.current.pause(); speechAudioRef.current.src = ''; }
+      if(musicAudioRef.current) { musicAudioRef.current.pause(); musicAudioRef.current.src = ''; }
+      
       setCurrentCommentary(`Guardando las notas de ${dj.name} sobre la sesión...`);
       try {
-          // This needs the original analyzed songs, not the full LibrarySong object
           const songsForDiary = songs.map(s => ({
               index: s.index,
               songId: s.song.id,
@@ -308,33 +302,42 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   };
 
   useEffect(() => {
-    if (status === PlayerStatus.LOADING || playlistIndex < 0) return;
     let isCancelled = false;
     cancellationRef.current = () => { isCancelled = true; };
     const runSequence = async () => {
+        if (playlistIndex < 0) return; // Not started yet
+
         if (playlistIndex >= show.playlist.length) {
             await speak(show.outroCommentary);
-            if (!isCancelled) { setPlayerStatus(PlayerStatus.ENDED); setCurrentCommentary("Fin de la sesión."); setAppState(AppState.SHOW_READY); }
+            if (!isCancelled) { setStatus(PlayerStatus.ENDED); setCurrentCommentary("Fin de la sesión."); setAppState(AppState.SHOW_READY); }
             return;
         }
         const item = show.playlist[playlistIndex];
-        if (item.type === 'song') {
-            const songData = songs.find(s => s.index === item.songIndex)?.song;
-            if (!songData) { advancePlaylist(playlistIndex + 1); return; }
-            await speak(item.commentary); if (isCancelled) return;
-            await playSong(songData); if (isCancelled) return;
-            advancePlaylist(playlistIndex + 1);
-        } else if (item.type === 'ad_break') {
-            for (const ad of item.adverts) { await speak(ad); if (isCancelled) return; }
-            advancePlaylist(playlistIndex + 1);
-        } else if (item.type === 'jingle') {
-            await speak(item.script); if(isCancelled) return;
-            advancePlaylist(playlistIndex + 1);
-        } else if (item.type === 'joke') {
-            const jokeText = await getARandomJoke();
-            if(jokeText) await speak(jokeText);
-            if(isCancelled) return;
-            advancePlaylist(playlistIndex + 1);
+        if (isCancelled) return;
+        
+        switch (item.type) {
+            case 'song':
+                const songData = songs.find(s => s.index === item.songIndex)?.song;
+                if (songData) {
+                    await speak(item.commentary);
+                    if (isCancelled) return;
+                    await playSong(songData);
+                }
+                break;
+            case 'ad_break':
+                for (const ad of item.adverts) { if (isCancelled) return; await speak(ad); }
+                break;
+            case 'jingle':
+                await speak(item.script);
+                break;
+            case 'joke':
+                const jokeText = await getARandomJoke();
+                if (jokeText) await speak(jokeText);
+                break;
+        }
+        
+        if (!isCancelled) {
+            advancePlaylist();
         }
     };
     runSequence();
@@ -345,55 +348,41 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   useEffect(() => { const fsChangeHandler = () => setIsFullScreen(!!document.fullscreenElement); document.addEventListener('fullscreenchange', fsChangeHandler); return () => document.removeEventListener('fullscreenchange', fsChangeHandler); }, []);
 
   useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-          if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || isLyricsVisible) return;
-          switch (e.code) {
-              case 'KeyF': handleFavorite(); break;
-              case 'KeyL': handleToggleLyrics(); break;
-              case 'KeyD': handleDislike(); break;
-          }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleFavorite, handleToggleLyrics, handleDislike, isLyricsVisible]);
-
-  useEffect(() => {
     const initAudioEngine = async () => {
       try {
-        await speak(show.showTitle);
         await speak(show.introCommentary);
         setPlaylistIndex(0);
-      } catch(e) { console.error("Error initializing audio engine:", e); setCurrentCommentary("Error al cargar el audio."); setPlayerStatus(PlayerStatus.ENDED); }
+      } catch(e) { console.error("Error initializing audio engine:", e); setCurrentCommentary("Error al cargar el audio."); setStatus(PlayerStatus.ENDED); }
     };
     initAudioEngine();
     return () => { 
         cleanupCurrentTask(); 
         if(sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-        if (currentSongUrlRef.current) {
-            URL.revokeObjectURL(currentSongUrlRef.current);
+        if (musicObjectUrlRef.current) {
+            URL.revokeObjectURL(musicObjectUrlRef.current);
         }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-      if (audioElementRef.current) {
-          audioElementRef.current.volume = isMuted ? 0 : volume;
-      }
+      const newVolume = isMuted ? 0 : volume;
+      if (speechAudioRef.current) { speechAudioRef.current.volume = newVolume; }
+      if (musicAudioRef.current) { musicAudioRef.current.volume = newVolume; }
   }, [volume, isMuted]);
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => { setVolume(Number(e.target.value)); setIsMuted(false); };
   const toggleMute = () => { if(isMuted) { setIsMuted(false); setVolume(lastVolumeRef.current || 0.5); } else { lastVolumeRef.current = volume; setIsMuted(true); setVolume(0); } };
   
-  const isControlDisabled = status === PlayerStatus.LOADING || status === PlayerStatus.ENDED;
-
   if (status === PlayerStatus.LOADING && playlistIndex < 0) {
       return (<div className="fixed inset-0 bg-slate-900 flex flex-col items-center justify-center text-white"><LoaderCircle className="w-12 h-12 animate-spin text-purple-400 mb-4" /><p className="text-lg">Calentando los motores de la radio...</p></div>);
   }
   
   return (
     <div ref={playerRef} className="fixed inset-0 bg-slate-900 text-white flex flex-col font-sans overflow-hidden select-none">
-      <audio ref={audioElementRef} preload="auto" />
+      <audio ref={speechAudioRef} preload="auto" />
+      <audio ref={musicAudioRef} preload="auto" />
+      
       <div className="absolute inset-0 z-0 bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 transition-all duration-1000" style={{ backgroundImage: show.showArt ? `url(${show.showArt})` : '', backgroundSize: 'cover', backgroundPosition: 'center' }} />
       <div className="absolute inset-0 z-0 bg-black/60 backdrop-blur-2xl"></div>
       
@@ -439,11 +428,10 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
         </header>
 
         <main className="flex-grow flex flex-col items-center justify-center my-4 overflow-hidden">
-             {/* Visualizer placeholder */}
              <div className="w-full max-w-4xl h-32 sm:h-48 md:h-56 flex items-center justify-center transition-opacity duration-500" style={{ opacity: status === PlayerStatus.PLAYING ? 1 : 0.4}}>
                 <Radio size={64} className={`text-purple-400/80 ${status === PlayerStatus.PLAYING ? 'animate-pulse' : ''}`} />
              </div>
-             <div className="text-center mt-8 sm:mt-12 transition-opacity duration-500" style={{ opacity: isControlDisabled ? 0.7 : 1}}>
+             <div className="text-center mt-8 sm:mt-12 transition-opacity duration-500">
                 <h2 className="text-3xl sm:text-5xl font-bold text-white truncate">{currentSong?.metadata.title || 'AI Radio'}</h2>
                 <p className="text-lg sm:text-xl text-slate-300 truncate">{currentSong?.metadata.artist || 'Tu DJ Personal'}</p>
              </div>
@@ -455,7 +443,7 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
           </div>
          
           <div className="flex justify-between items-center gap-4 sm:gap-6 mt-4">
-            <button onClick={handleDislike} aria-label="No me gusta esta canción" className="text-slate-400 hover:text-white transition-colors p-3 disabled:text-slate-700 disabled:cursor-not-allowed" disabled={!currentSongItem || isControlDisabled || isTransitioning}><ThumbsDown size={28} /></button>
+            <button onClick={handleDislike} aria-label="No me gusta esta canción" className="text-slate-400 hover:text-white transition-colors p-3 disabled:text-slate-700 disabled:cursor-not-allowed" disabled={!currentSongItem}><ThumbsDown size={28} /></button>
             
             <div className="flex flex-col items-center">
                 <div className="flex items-center gap-2 text-lg font-bold text-purple-300 uppercase tracking-widest">
@@ -465,7 +453,7 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
                 {currentSongItem && <p className="text-xs text-slate-400 mt-1">{currentSongItem.genre} &bull; {currentSong?.metadata.year || 'N/A'}</p>}
             </div>
 
-            <button onClick={handleFavorite} aria-label="Marcar como favorita" className={`p-3 transition-colors disabled:text-slate-700 ${isSongFavorited ? 'text-purple-400' : 'text-slate-400 hover:text-white'}`} disabled={!currentSongItem || isControlDisabled || isSongFavorited}><ThumbsUp size={28} className={isSongFavorited ? "fill-purple-400" : ""} /></button>
+            <button onClick={handleFavorite} aria-label="Marcar como favorita" className={`p-3 transition-colors disabled:text-slate-700 ${isSongFavorited ? 'text-purple-400' : 'text-slate-400 hover:text-white'}`} disabled={!currentSongItem || isSongFavorited}><ThumbsUp size={28} className={isSongFavorited ? "fill-purple-400" : ""} /></button>
           </div>
 
            <div className="flex items-center justify-center gap-2 w-full sm:w-auto mt-6">

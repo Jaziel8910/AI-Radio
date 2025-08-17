@@ -2,6 +2,7 @@
 
 
 
+
 export type Intention = 'Automatic' | 'Focus' | 'Relax' | 'Celebrate' | 'Nostalgia' | 'Discover';
 
 export interface InitialMetadata {
@@ -219,6 +220,7 @@ export interface AppSettings {
 export enum AppState {
   LOADING = 'LOADING',
   ONBOARDING = 'ONBOARDING',
+  ACCOUNT_RECOVERY = 'ACCOUNT_RECOVERY',
   HOME = 'HOME',
   DJ_VAULT = 'DJ_VAULT',
   DJ_EDITOR = 'DJ_EDITOR',

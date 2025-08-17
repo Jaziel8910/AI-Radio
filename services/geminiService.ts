@@ -1,7 +1,4 @@
 
-
-
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { GeminiAnalyzedSong, ResidentDJ, RadioShow, CustomizationOptions, Source, TimeOfDay, LibrarySong, SongMetadata, DJDNA, Intention } from '../types';
 import * as historyService from "./historyService";
@@ -159,28 +156,47 @@ User content: "${content}"
 
 export const enhanceSongsMetadata = async (songs: SongForEnhancement[]): Promise<SongForEnhancement[]> => {
     if (songs.length === 0) return [];
-    const songsToEnhance = songs.map(s => ({ id: s.id, title: s.metadata.title === s.file.name.replace(/\.[^/.]+$/, "") ? s.file.name : s.metadata.title, artist: s.metadata.artist === 'Artista Desconocido' ? '' : s.metadata.artist }));
+    
+    const BATCH_SIZE = 25;
+    let allEnhancedData: EnhancedSongData[] = [];
 
-    const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: `You are a music metadata expert. For each song ID, find accurate information. Use title/artist as clues. Return only corrected info. Songs: ${JSON.stringify(songsToEnhance)}`,
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT, required: ['id', 'title', 'artist'],
-                    properties: {
-                        id: { type: Type.STRING }, title: { type: Type.STRING }, artist: { type: Type.STRING }, album: { type: Type.STRING }, year: { type: Type.INTEGER }, genre: { type: Type.STRING },
+    for (let i = 0; i < songs.length; i += BATCH_SIZE) {
+        const batch = songs.slice(i, i + BATCH_SIZE);
+        const songsToEnhance = batch.map(s => ({ 
+            id: s.id, 
+            title: s.metadata.title === s.file.name.replace(/\.[^/.]+$/, "") ? s.file.name : s.metadata.title, 
+            artist: s.metadata.artist === 'Artista Desconocido' ? '' : s.metadata.artist 
+        }));
+
+        try {
+            const response = await ai.models.generateContent({
+                model: "gemini-2.5-flash",
+                contents: `You are a music metadata expert. For each song ID, find accurate information. Use title/artist as clues. Return only corrected info. Songs: ${JSON.stringify(songsToEnhance)}`,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT, required: ['id', 'title', 'artist'],
+                            properties: {
+                                id: { type: Type.STRING }, title: { type: Type.STRING }, artist: { type: Type.STRING }, album: { type: Type.STRING }, year: { type: Type.INTEGER }, genre: { type: Type.STRING },
+                            }
+                        }
                     }
                 }
-            }
+            });
+
+            const batchEnhancedData: EnhancedSongData[] = JSON.parse(response.text);
+            allEnhancedData.push(...batchEnhancedData);
+        } catch (error) {
+            console.error(`Error processing metadata batch (songs ${i} to ${i+BATCH_SIZE}):`, error);
+            const fallbackData = batch.map(s => ({id: s.id, ...s.metadata}));
+            allEnhancedData.push(...fallbackData);
         }
-    });
-
-    const enhancedDataArray: EnhancedSongData[] = JSON.parse(response.text);
-    const enhancedDataMap = new Map(enhancedDataArray.map((item: EnhancedSongData) => [item.id, item]));
-
+    }
+    
+    const enhancedDataMap = new Map(allEnhancedData.map((item: EnhancedSongData) => [item.id, item]));
+    
     return songs.map((song) => {
         const enhanced = enhancedDataMap.get(song.id);
         if (!enhanced) return song;

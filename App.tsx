@@ -1,10 +1,10 @@
 
-
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, createContext, useContext } from 'react';
 import { AppState, AnalyzedSong, RadioShow, CustomizationOptions, LibrarySong, ResidentDJ, AppSettings } from './types';
 import { createRadioShow } from './services/geminiService';
 import * as djService from './services/djService';
 import * as migrationService from './services/migrationService';
+import * as userService from './services/userService';
 import Library from './components/Library';
 import Loader from './components/Loader';
 import Player from './components/Player';
@@ -16,6 +16,7 @@ import Login from './components/Login';
 import SocialHub from './components/SocialHub';
 import Friends from './components/Friends';
 import ProfileSettings from './components/ProfileSettings';
+import AccountRecovery from './components/AccountRecovery';
 import { PlayCircle, Users, BookUser, LogOut, Radio, Music, MessageSquare, User, Settings, ChevronDown } from 'lucide-react';
 
 declare var puter: any;
@@ -62,7 +63,89 @@ const defaultAppSettings: AppSettings = {
 };
 
 
-const App: React.FC = () => {
+// --- App Settings Context ---
+interface AppSettingsContextType {
+    settings: AppSettings;
+    saveSettings: (newSettings: AppSettings) => Promise<void>;
+    resetSettings: () => Promise<void>;
+    isLoading: boolean;
+}
+
+const AppSettingsContext = createContext<AppSettingsContextType | undefined>(undefined);
+
+export const useAppSettings = (): AppSettingsContextType => {
+    const context = useContext(AppSettingsContext);
+    if (context === undefined) {
+        throw new Error('useAppSettings must be used within an AppSettingsProvider');
+    }
+    return context;
+};
+
+const AppSettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+    const [settings, setSettings] = useState<AppSettings>(defaultAppSettings);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const loadSettings = useCallback(async () => {
+        if (typeof puter === 'undefined' || !puter.kv) {
+            setIsLoading(false);
+            return;
+        }
+        try {
+            const stored = await puter.kv.get('aiRadioAppSettings');
+            if (stored) {
+                setSettings({ ...defaultAppSettings, ...stored });
+            }
+        } catch (e) {
+            console.error("Failed to load app settings", e);
+        } finally {
+            setIsLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadSettings();
+    }, [loadSettings]);
+
+    const saveSettings = async (newSettings: AppSettings) => {
+        if (typeof puter === 'undefined' || !puter.kv) {
+            alert("No se pudieron guardar los ajustes.");
+            return;
+        }
+        try {
+            await puter.kv.set('aiRadioAppSettings', newSettings);
+            setSettings(newSettings);
+            alert("Ajustes guardados.");
+        } catch(e) {
+            console.error("Failed to save settings", e);
+            alert("Hubo un error al guardar tus ajustes.");
+        }
+    };
+    
+    const resetSettings = async () => {
+        if (window.confirm("¿Restaurar todos los ajustes a sus valores por defecto?")) {
+            await saveSettings(defaultAppSettings);
+        }
+    };
+
+    const value = { settings, saveSettings, resetSettings, isLoading };
+
+    const fontSizeClass = {
+        small: 'text-sm',
+        medium: 'text-base',
+        large: 'text-lg',
+    }[settings.fontSize];
+
+    return (
+        <AppSettingsContext.Provider value={value}>
+            <div className={`${fontSizeClass} ${settings.dyslexicFriendlyFont ? 'font-dyslexic' : ''}`}>
+                 {children}
+            </div>
+        </AppSettingsContext.Provider>
+    );
+};
+
+
+const AppContent: React.FC = () => {
   const [user, setUser] = useState<any | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [appState, setAppState] = useState<AppState>(AppState.LOADING);
@@ -70,49 +153,33 @@ const App: React.FC = () => {
   const [activeDJId, setActiveDJId] = useState<string | null>(null);
   const [djToEdit, setDjToEdit] = useState<ResidentDJ | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [dataForRecovery, setDataForRecovery] = useState<ResidentDJ[] | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  const [appSettings, setAppSettings] = useState<AppSettings>(defaultAppSettings);
   const [songsForPlayer, setSongsForPlayer] = useState<AnalyzedSong[]>([]);
   const [radioShow, setRadioShow] = useState<RadioShow | null>(null);
   const [currentOptions, setCurrentOptions] = useState<CustomizationOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { settings, saveSettings, resetSettings } = useAppSettings();
 
   const activeDJ = allDJs.find(dj => dj.id === activeDJId) || null;
 
-  const loadAppSettings = useCallback(async () => {
-      if (typeof puter === 'undefined' || !puter.kv) return;
-      try {
-        const storedSettings = await puter.kv.get('aiRadioAppSettings');
-        if (storedSettings) {
-          setAppSettings({ ...defaultAppSettings, ...storedSettings });
-        }
-      } catch (e) {
-        console.error("Failed to load app settings", e);
-      }
-  }, []);
-
-  const initializeApp = useCallback(async () => {
+  const initializeApp = useCallback(async (authedUser: any) => {
     setAppState(AppState.LOADING);
     
     await migrationService.migrateAllFromLocalStorage();
-    await loadAppSettings();
+    await userService.ensureUserInDirectory(authedUser);
 
-    // Cargar los DJs desde la cuenta de Puter del usuario.
     const djs = await djService.getDJs();
-    const currentId = await djService.getActiveDJId();
-
     setAllDJs(djs);
 
-    // Si el usuario ya tiene DJs en su cuenta, lo llevamos a la pantalla principal.
-    // Si no, iniciamos el proceso de creación de su primer DJ.
     if (djs.length === 0) {
       setAppState(AppState.ONBOARDING);
     } else {
-      setActiveDJId(currentId || djs[0].id);
-      setAppState(AppState.HOME);
+      setDataForRecovery(djs);
+      setAppState(AppState.ACCOUNT_RECOVERY);
     }
-  }, [loadAppSettings]);
+  }, []);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -125,7 +192,7 @@ const App: React.FC = () => {
         if (isSignedIn) {
           const currentUser = await puter.auth.getUser();
           setUser(currentUser);
-          await initializeApp();
+          await initializeApp(currentUser);
         }
       } catch (err) {
         console.error("Auth check failed:", err);
@@ -150,7 +217,7 @@ const App: React.FC = () => {
     setIsAuthLoading(true);
     const currentUser = await puter.auth.getUser();
     setUser(currentUser);
-    await initializeApp();
+    await initializeApp(currentUser);
     setIsAuthLoading(false);
   };
   
@@ -240,7 +307,8 @@ const App: React.FC = () => {
         if (window.confirm("Importar este archivo sobreescribirá toda tu información actual (excepto los archivos de audio locales). ¿Estás seguro?")) {
             setIsAuthLoading(true);
             await migrationService.importUserData(importedData);
-            await initializeApp(); // Re-initialize app with imported data
+            const currentUser = await puter.auth.getUser(); // Re-fetch user after import
+            await initializeApp(currentUser); // Re-initialize app with imported data
             alert("¡Información importada con éxito!");
         }
     } catch (error) {
@@ -303,27 +371,24 @@ const App: React.FC = () => {
       setAppState(AppState.HOME);
     }
   }, []);
-  
-  const handleSaveSettings = async (settings: AppSettings) => {
-      if (typeof puter === 'undefined' || !puter.kv) {
-          alert("No se pudieron guardar los ajustes. Revisa tu conexión.");
-          return;
-      };
-      try {
-        await puter.kv.set('aiRadioAppSettings', settings);
-        setAppSettings(settings);
-        alert("Ajustes guardados.");
-      } catch(e) {
-        console.error("Failed to save app settings", e);
-        alert("Hubo un error al guardar tus ajustes.");
-      }
-    };
 
-    const handleResetSettings = async () => {
-        if (window.confirm("¿Seguro que quieres restaurar todos los ajustes de la aplicación a sus valores por defecto?")) {
-            await handleSaveSettings(defaultAppSettings);
-        }
-    };
+  const handleContinueFromRecovery = async () => {
+    const currentId = await djService.getActiveDJId();
+    setActiveDJId(currentId || (allDJs.length > 0 ? allDJs[0].id : null));
+    setDataForRecovery(null);
+    setAppState(AppState.HOME);
+  };
+
+  const handleStartOverFromRecovery = async () => {
+    if (window.confirm("¿Seguro que quieres borrar todos tus datos de la nube y empezar de nuevo? Esta acción es irreversible.")) {
+        setAppState(AppState.LOADING);
+        await migrationService.deleteAllUserData();
+        setAllDJs([]);
+        setActiveDJId(null);
+        setDataForRecovery(null);
+        setAppState(AppState.ONBOARDING);
+    }
+  };
 
   const resetApp = () => {
     setAppState(AppState.HOME);
@@ -339,13 +404,17 @@ const App: React.FC = () => {
     if (isAuthLoading) return <Loader text="Sincronizando con tu cuenta de Puter..." />;
     if (!user) return <Login onLogin={handleLogin} />;
 
-    if (!activeDJ && ![AppState.LOADING, AppState.ONBOARDING].includes(appState)) {
-        return <Loader text="Cargando tu estación..." />;
-    }
-
     switch (appState) {
       case AppState.ONBOARDING:
         return <Onboarding onHire={handleSaveDJ} onImport={triggerImport} error={error} />;
+      case AppState.ACCOUNT_RECOVERY:
+        if (!dataForRecovery) return <Loader text="Verificando cuenta..." />;
+        return <AccountRecovery 
+            user={user}
+            djs={dataForRecovery} 
+            onContinue={handleContinueFromRecovery} 
+            onStartOver={handleStartOverFromRecovery} 
+        />;
       case AppState.HOME:
         if (!activeDJ) return <Loader text="Cargando tu DJ..." />;
         return <Library activeDJ={activeDJ} onCreateShow={handleCreateShow} onManageDJs={() => setAppState(AppState.DJ_VAULT)} error={error} setError={setError} />;
@@ -357,9 +426,9 @@ const App: React.FC = () => {
         if (!activeDJ) return null;
         return <DJDiary dj={activeDJ} onBack={() => setAppState(AppState.PROFILE_SETTINGS)} />;
       case AppState.SOCIAL_HUB:
-        return <SocialHub onBack={onBackToHome} />;
+        return <SocialHub user={user} onBack={onBackToHome} />;
       case AppState.FRIENDS:
-        return <Friends onBack={onBackToHome} />;
+        return <Friends user={user} onBack={onBackToHome} />;
       case AppState.PROFILE_SETTINGS:
         return <ProfileSettings 
             onBack={onBackToHome} 
@@ -371,9 +440,6 @@ const App: React.FC = () => {
             onEditDJ={(dj) => { setDjToEdit(dj); setAppState(AppState.DJ_EDITOR); }}
             onImport={triggerImport}
             onExportAll={handleExportAllData}
-            appSettings={appSettings}
-            onSaveSettings={handleSaveSettings}
-            onResetSettings={handleResetSettings}
         />;
       case AppState.CREATING_SHOW:
         if (!activeDJ) return null;
@@ -444,5 +510,14 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+
+const App: React.FC = () => {
+    return (
+        <AppSettingsProvider>
+            <AppContent />
+        </AppSettingsProvider>
+    );
+}
 
 export default App;
