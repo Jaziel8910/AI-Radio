@@ -321,6 +321,11 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
                 if (songData) {
                     await speak(item.commentary);
                     if (isCancelled) return;
+                    
+                    // Small delay to ensure browser audio context is ready for the next track
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    if (isCancelled) return;
+                    
                     await playSong(songData);
                 }
                 break;
