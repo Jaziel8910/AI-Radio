@@ -1,6 +1,7 @@
 
+
 import React, { useState, useMemo } from 'react';
-import { DJ_PERSONAS, DJ_PERSONA_CATEGORIES, AMAZON_POLLY_VOICES } from '../constants';
+import { DJ_PERSONAS, DJ_PERSONA_CATEGORIES, LANGUAGES_AND_VOICES } from '../constants';
 import { DJPersona, ResidentDJ } from '../types';
 import { Sparkles, User, ChevronRight, ChevronLeft, Check, Upload } from 'lucide-react';
 
@@ -19,14 +20,14 @@ const Onboarding: React.FC<OnboardingProps> = ({ onHire, onImport, error }) => {
     const handleSubmit = () => {
         if (name.trim() && selectedPersona) {
             const defaultLang = 'es-ES';
-            const defaultVoice = AMAZON_POLLY_VOICES.find(v => v.langCode === defaultLang)?.voices[0];
+            const defaultVoice = LANGUAGES_AND_VOICES.find(v => v.langCode === defaultLang)?.voices[0];
             const newDJ: ResidentDJ = {
                 id: crypto.randomUUID(),
                 name: name.trim(),
                 persona: selectedPersona,
                 dna: { humor: 0, energy: 0, knowledge: 0, tone: 0, pace: 0, pitch: 0 },
                 voiceLanguage: defaultLang,
-                voiceId: defaultVoice?.voiceId || 'Lucia',
+                voiceId: defaultVoice?.id || 'Lucia',
                 voiceEngine: 'generative',
             };
             onHire(newDJ);

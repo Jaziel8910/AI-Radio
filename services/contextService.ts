@@ -178,11 +178,10 @@ export const getTodaysHoliday = async (): Promise<string | null> => {
         const countryCode = userLang.split('-')[1] || 'US';
         const year = new Date().getFullYear();
         
-        // This endpoint returns 200 if it's a holiday, and 204 if it is NOT.
+        // This endpoint returns 204 if it's NOT a holiday. That's the key!
         const isHolidayResponse = await robustFetch(`https://date.nager.at/api/v3/IsTodayPublicHoliday/${countryCode}`);
         
-        // Only if the status is 200 (OK), we proceed to find the holiday name.
-        // A 204 (No Content) response means it's not a holiday, so we do nothing.
+        // ONLY if the response is 200 (OK), we proceed.
         if (isHolidayResponse.status === 200) {
             const holidaysResponse = await robustFetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`);
             const holidays = await holidaysResponse.json();
@@ -191,9 +190,13 @@ export const getTodaysHoliday = async (): Promise<string | null> => {
             if(todayHoliday) return `¡Alerta de fiesta! Hoy es ${todayHoliday.localName} en tu zona. ¡A celebrar como se debe!`;
         }
         
+        // If the response was 204 or anything else, we just do nothing.
         return null;
     } catch (e) {
-        console.error("Error fetching holiday info:", e);
+        // We ignore the specific "null body" error for 204s, but log others.
+        if (e instanceof Error && !e.message.includes("null body")) {
+             console.error("Error fetching holiday info:", e);
+        }
         return null;
     }
 };

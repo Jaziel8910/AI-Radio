@@ -17,6 +17,8 @@ import SocialHub from './components/SocialHub';
 import Friends from './components/Friends';
 import ProfileSettings from './components/ProfileSettings';
 import { PlayCircle, Users, BookUser, LogOut, Radio, Music, MessageSquare, User, Settings, ChevronDown } from 'lucide-react';
+import DebugOverlay from './components/DebugOverlay';
+import { logger } from './services/logger';
 
 declare var puter: any;
 
@@ -95,7 +97,7 @@ const AppSettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setSettings({ ...defaultAppSettings, ...stored });
             }
         } catch (e) {
-            console.error("Failed to load app settings", e);
+            logger.error("Failed to load app settings", e);
         } finally {
             setIsLoading(false);
         }
@@ -115,7 +117,7 @@ const AppSettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setSettings(newSettings);
             alert("Ajustes guardados.");
         } catch(e) {
-            console.error("Failed to save settings", e);
+            logger.error("Failed to save settings", e);
             alert("Hubo un error al guardar tus ajustes.");
         }
     };
@@ -195,7 +197,7 @@ const AppContent: React.FC = () => {
           await initializeApp(currentUser);
         }
       } catch (err) {
-        console.error("Auth check failed:", err);
+        logger.error("Auth check failed:", err);
       } finally {
         setIsAuthLoading(false);
       }
@@ -294,7 +296,7 @@ const AppContent: React.FC = () => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     } catch (error) {
-        console.error("Error exporting data:", error);
+        logger.error("Error exporting data:", error);
         alert("No se pudo exportar la información.");
     }
   };
@@ -312,7 +314,7 @@ const AppContent: React.FC = () => {
             alert("¡Información importada con éxito!");
         }
     } catch (error) {
-        console.error("Error importing data:", error);
+        logger.error("Error importing data:", error);
         alert("El archivo de respaldo es inválido o está corrupto.");
     } finally {
         setIsAuthLoading(false);
@@ -364,7 +366,7 @@ const AppContent: React.FC = () => {
       setRadioShow(show);
       setAppState(AppState.SHOW_READY);
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       let errorMessage = "Hubo un error al crear tu estación de radio. Inténtalo de nuevo.";
       if (err instanceof Error) errorMessage = err.message;
       setError(errorMessage);
@@ -487,9 +489,14 @@ const AppContent: React.FC = () => {
 
 
 const App: React.FC = () => {
+    useEffect(() => {
+        logger.info("AI Radio App Initialized. Press Ctrl+Shift+D to toggle debug console.");
+    }, []);
+
     return (
         <AppSettingsProvider>
             <AppContent />
+            <DebugOverlay />
         </AppSettingsProvider>
     );
 }

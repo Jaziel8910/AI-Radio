@@ -7,6 +7,7 @@ import { getFileFromSessionStore } from '../services/sessionFileService';
 import { getLyrics } from '../services/geminiService';
 import { generateAndSavePostShowEntry } from '../services/diaryService';
 import { getARandomJoke } from '../services/contextService';
+import { logger } from '../services/logger';
 
 declare var puter: any;
 
@@ -52,6 +53,34 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   const currentSong = currentSongItem ? songs.find(s => s.index === currentSongItem.songIndex)?.song : null;
   const isSongFavorited = currentSong ? favoritedSongs.has(currentSong.id) : false;
 
+  useEffect(() => {
+      const speechEl = speechAudioRef.current;
+      const musicEl = musicAudioRef.current;
+
+      const setupListeners = (el: HTMLAudioElement | null, name: string) => {
+          if (!el) return;
+          const events = ['error', 'stalled', 'waiting', 'suspend', 'emptied', 'abort'];
+          const listeners: { [key: string]: EventListener } = {};
+          events.forEach(eventName => {
+              const listener = () => logger.warn(`AUDIO EVENT (${name}): ${eventName}`, el.error);
+              listeners[eventName] = listener;
+              el.addEventListener(eventName, listener);
+          });
+          return () => {
+              events.forEach(eventName => el.removeEventListener(eventName, listeners[eventName]));
+          }
+      };
+
+      const cleanupSpeech = setupListeners(speechEl, 'Speech');
+      const cleanupMusic = setupListeners(musicEl, 'Music');
+      
+      return () => {
+          cleanupSpeech?.();
+          cleanupMusic?.();
+      }
+  }, []);
+
+
   const cleanupCurrentTask = useCallback(() => {
     if (cancellationRef.current) {
       cancellationRef.current();
@@ -81,19 +110,23 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
 
   const speak = useCallback(async (text: string, isInterruptible: boolean = false): Promise<void> => {
     if (!isInterruptible) cleanupCurrentTask();
-    if (!text?.trim()) return;
+    if (!text?.trim()) {
+        logger.debug('[speak] Ignorado por texto vacío.');
+        return;
+    }
 
     return new Promise((resolve, reject) => {
         if (!isInterruptible) setStatus(PlayerStatus.SPEAKING);
         setCurrentCommentary(text);
 
-        const puterOptions = { language: dj.voiceLanguage || 'es-ES', engine: dj.voiceEngine || 'generative' };
+        const puterOptions = { language: dj.voiceLanguage || 'es-ES', engine: dj.voiceEngine || 'generative', voice: dj.voiceId };
+        logger.debug(`[speak] Solicitando TTS para: "${text.substring(0, 40)}..."`, puterOptions);
         
         puter.ai.txt2speech(text, puterOptions).then((ttsAudio: HTMLAudioElement) => {
             const speechEl = speechAudioRef.current;
             const musicEl = musicAudioRef.current;
             if (!speechEl) {
-                console.error("Speech audio element not found.");
+                logger.error("[speak] Speech audio element no encontrado.");
                 resolve();
                 return;
             }
@@ -117,16 +150,22 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
             };
             
             const handleError = (e: Event) => {
-                console.error("Error playing speech audio:", e);
+                logger.error("[speak] Error al reproducir audio de voz:", e);
                 handleEnd();
             };
 
             speechEl.addEventListener('ended', handleEnd);
             speechEl.addEventListener('error', handleError);
 
+            logger.debug('[speak] TTS recibido. Reproduciendo...');
             speechEl.src = ttsAudio.src;
             speechEl.volume = isMuted ? 0 : volume;
-            speechEl.play().catch(handleError);
+            speechEl.play().then(() => {
+                logger.info('[speak] Reproducción de voz iniciada con éxito.');
+            }).catch(err => {
+                logger.error('[speak] ¡FALLO EL PLAY() DE LA VOZ!', err);
+                handleError(new Event('error'));
+            });
             
             if (!isInterruptible) {
                 cancellationRef.current = () => {
@@ -135,16 +174,19 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
                 };
             }
         }).catch((err: any) => {
-            console.error("Puter TTS generation failed:", err);
+            logger.error("[speak] ¡FALLO LA GENERACIÓN DE TTS!", err);
             reject(err);
         });
     });
-  }, [cleanupCurrentTask, dj.voiceLanguage, dj.voiceEngine, isMuted, volume]);
+  }, [cleanupCurrentTask, dj, isMuted, volume]);
 
   const playSong = useCallback(async (song: LibrarySong): Promise<void> => {
       cleanupCurrentTask();
       const musicEl = musicAudioRef.current;
-      if (!musicEl) return Promise.resolve();
+      if (!musicEl) {
+          logger.error("[playSong] Music audio element no encontrado.");
+          return Promise.resolve();
+      }
 
       if (musicObjectUrlRef.current) {
           URL.revokeObjectURL(musicObjectUrlRef.current);
@@ -153,18 +195,24 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
 
       const file = getFileFromSessionStore(song.id);
       if (!file) {
+          logger.error(`[playSong] No se pudo encontrar el archivo para la canción ID: ${song.id} ("${song.metadata.title}")`);
           await speak(`No se pudo encontrar el archivo de audio para "${song.metadata.title}". Saltando a la siguiente.`, true);
           return Promise.resolve();
       }
+      
+      logger.debug(`[playSong] Archivo encontrado para "${song.metadata.title}".`);
 
       return new Promise((resolve) => {
           const objectUrl = URL.createObjectURL(file);
           musicObjectUrlRef.current = objectUrl;
           musicEl.src = objectUrl;
           musicEl.volume = 0;
+          logger.debug(`[playSong] Creado Object URL: ${objectUrl} para "${song.metadata.title}"`);
+          
           const playPromise = musicEl.play();
 
           playPromise.then(() => {
+              logger.info(`[playSong] Reproducción de "${song.metadata.title}" iniciada con éxito.`);
               logSongPlay(song.id);
               animateVolume(musicEl, isMuted ? 0 : volume, FADE_TIME);
               setStatus(PlayerStatus.PLAYING);
@@ -184,8 +232,8 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
                   resolve();
               };
           }).catch(error => {
-              console.error("Error playing song:", error);
-              speak(`Hubo un problema al reproducir "${song.metadata.title}". Saltando a la siguiente.`, true);
+              logger.error(`[playSong] ¡FALLO EL PLAY() DE LA CANCIÓN!`, error);
+              speak(`Tuve un problema al reproducir "${song.metadata.title}". Saltando a la siguiente.`, true);
               resolve();
           });
       });
@@ -224,7 +272,7 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
     if (navigator.share) {
       try {
         await navigator.share({ title: 'AI Radio', text: shareText });
-      } catch (error) { console.error('Error al compartir:', error); }
+      } catch (error) { logger.error('Error al compartir:', error); }
     } else {
       navigator.clipboard.writeText(shareText);
       alert('Enlace del show copiado al portapapeles.');
@@ -295,7 +343,7 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
           }));
           await generateAndSavePostShowEntry(dj, songsForDiary);
       } catch (e) {
-          console.error("Failed to save diary entry:", e);
+          logger.error("Failed to save diary entry:", e);
       } finally {
           onClose();
       }
@@ -306,14 +354,16 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
     cancellationRef.current = () => { isCancelled = true; };
     const runSequence = async () => {
         if (playlistIndex < 0) return; // Not started yet
+        logger.debug(`[runSequence] Iniciando índice de playlist: ${playlistIndex}`);
 
         if (playlistIndex >= show.playlist.length) {
+            logger.info("[runSequence] Fin de la playlist. Reproduciendo outro.");
             await speak(show.outroCommentary);
             if (!isCancelled) { setStatus(PlayerStatus.ENDED); setCurrentCommentary("Fin de la sesión."); setAppState(AppState.SHOW_READY); }
             return;
         }
         const item = show.playlist[playlistIndex];
-        if (isCancelled) return;
+        if (isCancelled) { logger.warn(`[runSequence] Tarea cancelada en el índice ${playlistIndex}`); return; }
         
         switch (item.type) {
             case 'song':
@@ -322,11 +372,12 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
                     await speak(item.commentary);
                     if (isCancelled) return;
                     
-                    // Small delay to ensure browser audio context is ready for the next track
                     await new Promise(resolve => setTimeout(resolve, 200));
                     if (isCancelled) return;
                     
                     await playSong(songData);
+                } else {
+                    logger.error(`[runSequence] No se encontraron datos para la canción con índice ${item.songIndex}`);
                 }
                 break;
             case 'ad_break':
@@ -355,15 +406,17 @@ const Player: React.FC<PlayerProps> = ({ show, songs, options, dj, setAppState, 
   useEffect(() => {
     const initAudioEngine = async () => {
       try {
+        logger.info("[initAudioEngine] Reproduciendo intro...");
         await speak(show.introCommentary);
         setPlaylistIndex(0);
-      } catch(e) { console.error("Error initializing audio engine:", e); setCurrentCommentary("Error al cargar el audio."); setStatus(PlayerStatus.ENDED); }
+      } catch(e) { logger.error("Error initializing audio engine:", e); setCurrentCommentary("Error al cargar el audio."); setStatus(PlayerStatus.ENDED); }
     };
     initAudioEngine();
     return () => { 
         cleanupCurrentTask(); 
         if(sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
         if (musicObjectUrlRef.current) {
+            logger.debug(`[cleanup] Revocando Object URL: ${musicObjectUrlRef.current}`);
             URL.revokeObjectURL(musicObjectUrlRef.current);
         }
     };

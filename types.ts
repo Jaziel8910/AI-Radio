@@ -156,7 +156,7 @@ export interface ResidentDJ {
   dna: DJDNA;
   voiceLanguage: string;
   voiceId: string; 
-  voiceEngine: 'standard' | 'neural' | 'generative';
+  voiceEngine: 'standard' | 'neural' | 'generative' | 'long-form';
 }
 
 export interface DJDiaryEntry {

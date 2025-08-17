@@ -154,83 +154,56 @@ export type Palette = {
   stroke?: string;
 };
 
-export const AMAZON_POLLY_VOICES: {
-  langName: string;
-  langCode: string;
-  voices: { name: string, voiceId: string, gender: 'Male' | 'Female' }[];
-}[] = [
+export const LANGUAGES_AND_VOICES = [
+    {
+        langName: 'Inglés (EE.UU.)',
+        langCode: 'en-US',
+        voices: [
+            { id: 'Joanna', gender: 'Femenino', engines: ['standard', 'neural', 'generative'] },
+            { id: 'Matthew', gender: 'Masculino', engines: ['neural', 'generative'] },
+            { id: 'Danielle', gender: 'Femenino', engines: ['neural', 'generative'] },
+            { id: 'Gregory', gender: 'Masculino', engines: ['neural', 'long-form'] },
+            { id: 'Ruth', gender: 'Femenino', engines: ['neural', 'generative', 'long-form'] },
+            { id: 'Stephen', gender: 'Masculino', engines: ['neural', 'generative'] },
+            { id: 'Salli', gender: 'Femenino', engines: ['standard', 'neural'] },
+            { id: 'Justin', gender: 'Masculino (Niño)', engines: ['standard', 'neural'] },
+            { id: 'Kevin', gender: 'Masculino (Niño)', engines: ['standard', 'neural'] },
+            { id: 'Ivy', gender: 'Femenino (Niña)', engines: ['standard', 'neural'] },
+            { id: 'Kendra', gender: 'Femenino', engines: ['standard', 'neural'] },
+            { id: 'Kimberly', gender: 'Femenino', engines: ['standard', 'neural'] },
+            { id: 'Joey', gender: 'Masculino', engines: ['standard', 'neural'] }
+        ]
+    },
     {
         langName: 'Español (España)',
         langCode: 'es-ES',
         voices: [
-            { name: 'Lucia', voiceId: 'Lucia', gender: 'Female' },
-            { name: 'Sergio', voiceId: 'Sergio', gender: 'Male' },
-            { name: 'Conchita', voiceId: 'Conchita', gender: 'Female' },
-            { name: 'Enrique', voiceId: 'Enrique', gender: 'Male' },
-        ],
+            { id: 'Lucia', gender: 'Femenino', engines: ['standard', 'neural', 'generative'] },
+            { id: 'Sergio', gender: 'Masculino', engines: ['neural', 'generative'] },
+            { id: 'Conchita', gender: 'Femenino', engines: ['standard'] },
+            { id: 'Enrique', gender: 'Masculino', engines: ['standard'] }
+        ]
     },
     {
         langName: 'Español (México)',
         langCode: 'es-MX',
         voices: [
-            { name: 'Mia', voiceId: 'Mia', gender: 'Female' },
-            { name: 'Andres', voiceId: 'Andres', gender: 'Male' },
-        ],
+            { id: 'Mia', gender: 'Femenino', engines: ['standard', 'neural', 'generative'] },
+            { id: 'Andres', gender: 'Masculino', engines: ['neural', 'generative'] }
+        ]
     },
     {
         langName: 'Español (EE.UU.)',
         langCode: 'es-US',
         voices: [
-            { name: 'Lupe', voiceId: 'Lupe', gender: 'Female' },
-            { name: 'Penelope', voiceId: 'Penelope', gender: 'Female' },
-            { name: 'Miguel', voiceId: 'Miguel', gender: 'Male' },
-        ],
-    },
-    {
-        langName: 'Inglés (EE.UU.)',
-        langCode: 'en-US',
-        voices: [
-            { name: 'Joanna', voiceId: 'Joanna', gender: 'Female' },
-            { name: 'Matthew', voiceId: 'Matthew', gender: 'Male' },
-            { name: 'Ivy', voiceId: 'Ivy', gender: 'Female' },
-            { name: 'Justin', voiceId: 'Justin', gender: 'Male' },
-            { name: 'Kendra', voiceId: 'Kendra', gender: 'Female' },
-            { name: 'Joey', voiceId: 'Joey', gender: 'Male' },
-            { name: 'Ruth', voiceId: 'Ruth', gender: 'Female' },
-            { name: 'Kevin', voiceId: 'Kevin', gender: 'Male' },
-        ],
-    },
-    {
-        langName: 'Francés (Francia)',
-        langCode: 'fr-FR',
-        voices: [
-            { name: 'Lea', voiceId: 'Lea', gender: 'Female' },
-            { name: 'Remi', voiceId: 'Remi', gender: 'Male' },
-            { name: 'Celine', voiceId: 'Celine', gender: 'Female' },
-            { name: 'Mathieu', voiceId: 'Mathieu', gender: 'Male' },
-        ],
-    },
-    {
-        langName: 'Alemán (Alemania)',
-        langCode: 'de-DE',
-        voices: [
-            { name: 'Vicki', voiceId: 'Vicki', gender: 'Female' },
-            { name: 'Daniel', voiceId: 'Daniel', gender: 'Male' },
-            { name: 'Marlene', voiceId: 'Marlene', gender: 'Female' },
-            { name: 'Hans', voiceId: 'Hans', gender: 'Male' },
-        ],
-    },
-    {
-        langName: 'Italiano (Italia)',
-        langCode: 'it-IT',
-        voices: [
-            { name: 'Bianca', voiceId: 'Bianca', gender: 'Female' },
-            { name: 'Adriano', voiceId: 'Adriano', gender: 'Male' },
-            { name: 'Carla', voiceId: 'Carla', gender: 'Female' },
-            { name: 'Giorgio', voiceId: 'Giorgio', gender: 'Male' },
-        ],
-    },
+            { id: 'Lupe', gender: 'Femenino', engines: ['standard', 'neural', 'generative'] },
+            { id: 'Pedro', gender: 'Masculino', engines: ['neural', 'generative'] },
+            { id: 'Penelope', gender: 'Femenino', engines: ['standard'] },
+            { id: 'Miguel', gender: 'Masculino', engines: ['standard'] }
+        ]
+    }
 ];
+
 
 export const VISUALIZER_PALETTES: Record<string, Palette> = {
   neon_purple: {

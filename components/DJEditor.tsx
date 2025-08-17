@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { ResidentDJ, DJPersona, DJDNA } from '../types';
-import { DJ_PERSONAS, AMAZON_POLLY_VOICES } from '../constants';
+import { DJ_PERSONAS, LANGUAGES_AND_VOICES } from '../constants';
 import { User, Mic, Save, ArrowLeft, BrainCircuit, Heart, Zap, Annoyed, Volume2, Bot, LoaderCircle, SlidersHorizontal, TestTube2, ChevronsUpDown } from 'lucide-react';
 
 declare var puter: any;
@@ -11,6 +10,8 @@ interface DJEditorProps {
     onSave: (dj: ResidentDJ) => void;
     onBack: () => void;
 }
+
+type VoiceEngine = 'standard' | 'neural' | 'generative' | 'long-form';
 
 const DNASlider = ({ label, value, onChange, minLabel, maxLabel, icon: Icon, min = -1, max = 1, step = 0.05 }: { label: string, value: number, onChange: (val: number) => void, minLabel: string, maxLabel: string, icon: React.ElementType, min?:number, max?: number, step?: number }) => (
     <div>
@@ -38,29 +39,39 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
     
     const [voiceLanguage, setVoiceLanguage] = useState(dj?.voiceLanguage || 'es-ES');
     const [voiceId, setVoiceId] = useState(dj?.voiceId || 'Lucia');
-    const [voiceEngine, setVoiceEngine] = useState<'standard' | 'neural' | 'generative'>(dj?.voiceEngine || 'generative');
+    const [voiceEngine, setVoiceEngine] = useState<VoiceEngine>(dj?.voiceEngine || 'generative');
     
     const [isTestingVoice, setIsTestingVoice] = useState(false);
     const [activeTab, setActiveTab] = useState('persona');
 
+    const availableLanguages = useMemo(() => LANGUAGES_AND_VOICES, []);
     const availableVoices = useMemo(() => {
-        return AMAZON_POLLY_VOICES.find(lang => lang.langCode === voiceLanguage)?.voices || [];
-    }, [voiceLanguage]);
+        return availableLanguages.find(lang => lang.langCode === voiceLanguage)?.voices || [];
+    }, [voiceLanguage, availableLanguages]);
+    const availableEngines = useMemo(() => {
+        return availableVoices.find(v => v.id === voiceId)?.engines || [];
+    }, [voiceId, availableVoices]);
 
     useEffect(() => {
-        // If the selected voice ID is not in the new list of available voices, default to the first one
-        if (!availableVoices.some(v => v.voiceId === voiceId)) {
-            setVoiceId(availableVoices[0]?.voiceId || '');
+        if (!availableVoices.some(v => v.id === voiceId)) {
+            setVoiceId(availableVoices[0]?.id || '');
         }
-    }, [availableVoices, voiceId]);
+    }, [voiceLanguage, availableVoices, voiceId]);
+
+    useEffect(() => {
+        if (!availableEngines.includes(voiceEngine)) {
+            setVoiceEngine((availableEngines[0] || 'standard') as VoiceEngine);
+        }
+    }, [voiceId, availableEngines, voiceEngine]);
+
 
     const handleDnaChange = (field: keyof DJDNA, value: number) => {
         setDna(prev => ({ ...prev, [field]: value }));
     };
 
     const testVoice = async () => {
-        if (typeof puter === 'undefined' || !puter.ai?.txt2speech) {
-            alert("El motor de voz de Puter no está disponible. Revisa la conexión.");
+        if (typeof puter === 'undefined' || !puter.ai?.txt2speech || !voiceId) {
+            alert("El motor de voz de Puter no está disponible o no se ha seleccionado una voz.");
             return;
         }
         setIsTestingVoice(true);
@@ -159,18 +170,24 @@ const DJEditor: React.FC<DJEditorProps> = ({ dj, onSave, onBack }) => {
                                 <div>
                                     <label htmlFor="voice-lang" className="block text-sm font-medium text-slate-300 mb-2">Idioma y Región</label>
                                     <select id="voice-lang" value={voiceLanguage} onChange={(e) => setVoiceLanguage(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3 appearance-none">
-                                        {AMAZON_POLLY_VOICES.map(lang => (<option key={lang.langCode} value={lang.langCode}>{lang.langName}</option>))}
+                                        {availableLanguages.map(lang => (<option key={lang.langCode} value={lang.langCode}>{lang.langName}</option>))}
                                     </select>
                                 </div>
                                 <div>
                                     <label htmlFor="voice-id" className="block text-sm font-medium text-slate-300 mb-2">Voz Específica</label>
                                     <select id="voice-id" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3 appearance-none" disabled={availableVoices.length === 0}>
-                                        {availableVoices.map(v => (<option key={v.voiceId} value={v.voiceId}>{v.name} ({v.gender})</option>))}
+                                        {availableVoices.map(v => (<option key={v.id} value={v.id}>{v.id} ({v.gender})</option>))}
+                                    </select>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label htmlFor="voice-engine" className="block text-sm font-medium text-slate-300 mb-2">Motor de IA</label>
+                                    <select id="voice-engine" value={voiceEngine} onChange={e => setVoiceEngine(e.target.value as VoiceEngine)} className="bg-slate-900 border border-slate-700 rounded-lg w-full p-3" disabled={availableEngines.length === 0}>
+                                        {availableEngines.map(engine => (<option key={engine} value={engine} className="capitalize">{engine}</option>))}
                                     </select>
                                 </div>
                             </div>
                             <div className="flex gap-2 items-center justify-center">
-                                <button type="button" onClick={testVoice} disabled={isTestingVoice} className="bg-slate-700 h-12 px-6 rounded-lg hover:bg-slate-600 flex items-center justify-center disabled:bg-slate-800 disabled:cursor-wait">
+                                <button type="button" onClick={testVoice} disabled={isTestingVoice || !voiceId} className="bg-slate-700 h-12 px-6 rounded-lg hover:bg-slate-600 flex items-center justify-center disabled:bg-slate-800 disabled:cursor-wait">
                                     {isTestingVoice ? <LoaderCircle size={20} className="animate-spin" /> : 'Probar Voz'}
                                 </button>
                             </div>
