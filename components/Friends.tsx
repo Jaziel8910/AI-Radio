@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, UserPlus, Check, X, LoaderCircle, Search } from 'lucide-react';
+import { ArrowLeft, UserPlus, Check, X, LoaderCircle, Search, MessageCircle } from 'lucide-react';
 import * as socialService from '../services/socialService';
 import * as userService from '../services/userService';
 
@@ -67,12 +67,18 @@ const Friends: React.FC<FriendsProps> = ({ user, onBack }) => {
                         <img src={person.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(person.username[0] || 'A')}`} alt="avatar" className="w-10 h-10 rounded-full"/>
                         <span className="font-semibold">{person.username}</span>
                     </div>
-                    {isRequestList && (
-                        <div className="flex gap-2">
-                            <button onClick={() => handleAccept(person)} className="p-2 bg-green-500/20 text-green-300 rounded-full hover:bg-green-500/40"><Check size={18}/></button>
-                            <button onClick={() => handleDecline(person.uid)} className="p-2 bg-red-500/20 text-red-300 rounded-full hover:bg-red-500/40"><X size={18}/></button>
-                        </div>
-                    )}
+                    <div className="flex gap-2">
+                        {isRequestList ? (
+                            <>
+                                <button onClick={() => handleAccept(person)} className="p-2 bg-green-500/20 text-green-300 rounded-full hover:bg-green-500/40"><Check size={18}/></button>
+                                <button onClick={() => handleDecline(person.uid)} className="p-2 bg-red-500/20 text-red-300 rounded-full hover:bg-red-500/40"><X size={18}/></button>
+                            </>
+                        ) : (
+                            <button onClick={() => alert(`Chat con ${person.username} próximamente!`)} className="p-2 bg-purple-500/20 text-purple-300 rounded-full hover:bg-purple-500/40">
+                                <MessageCircle size={18}/>
+                            </button>
+                        )}
+                    </div>
                 </div>
             ))}
         </div>

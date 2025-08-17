@@ -1,7 +1,4 @@
 
-
-
-
 import React from 'react';
 import { ResidentDJ } from '../types';
 import { User, Trash2, Edit, CheckCircle, PlusCircle, ArrowLeft, Copy, Upload, Download } from 'lucide-react';
@@ -56,6 +53,8 @@ const DJCard: React.FC<{ dj: ResidentDJ, isActive: boolean, onSelect: () => void
                 <DNABar value={dj.dna.energy} label="Energía" colorClass="bg-red-400"/>
                 <DNABar value={dj.dna.knowledge} label="Profundidad" colorClass="bg-blue-400"/>
                 <DNABar value={dj.dna.tone} label="Tono" colorClass="bg-yellow-400"/>
+                <DNABar value={dj.dna.pace} label="Ritmo" colorClass="bg-teal-400"/>
+                <DNABar value={dj.dna.pitch} label="Tono de Voz" colorClass="bg-orange-400"/>
             </div>
 
             <div className="mt-6 flex gap-2">

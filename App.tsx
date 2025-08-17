@@ -16,7 +16,6 @@ import Login from './components/Login';
 import SocialHub from './components/SocialHub';
 import Friends from './components/Friends';
 import ProfileSettings from './components/ProfileSettings';
-import AccountRecovery from './components/AccountRecovery';
 import { PlayCircle, Users, BookUser, LogOut, Radio, Music, MessageSquare, User, Settings, ChevronDown } from 'lucide-react';
 
 declare var puter: any;
@@ -153,7 +152,6 @@ const AppContent: React.FC = () => {
   const [activeDJId, setActiveDJId] = useState<string | null>(null);
   const [djToEdit, setDjToEdit] = useState<ResidentDJ | null>(null);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [dataForRecovery, setDataForRecovery] = useState<ResidentDJ[] | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const [songsForPlayer, setSongsForPlayer] = useState<AnalyzedSong[]>([]);
@@ -176,8 +174,10 @@ const AppContent: React.FC = () => {
     if (djs.length === 0) {
       setAppState(AppState.ONBOARDING);
     } else {
-      setDataForRecovery(djs);
-      setAppState(AppState.ACCOUNT_RECOVERY);
+      const lastActiveId = await djService.getActiveDJId();
+      const newActiveId = djs.some(dj => dj.id === lastActiveId) ? lastActiveId : djs[0].id;
+      setActiveDJId(newActiveId);
+      setAppState(AppState.HOME);
     }
   }, []);
 
@@ -372,24 +372,6 @@ const AppContent: React.FC = () => {
     }
   }, []);
 
-  const handleContinueFromRecovery = async () => {
-    const currentId = await djService.getActiveDJId();
-    setActiveDJId(currentId || (allDJs.length > 0 ? allDJs[0].id : null));
-    setDataForRecovery(null);
-    setAppState(AppState.HOME);
-  };
-
-  const handleStartOverFromRecovery = async () => {
-    if (window.confirm("¿Seguro que quieres borrar todos tus datos de la nube y empezar de nuevo? Esta acción es irreversible.")) {
-        setAppState(AppState.LOADING);
-        await migrationService.deleteAllUserData();
-        setAllDJs([]);
-        setActiveDJId(null);
-        setDataForRecovery(null);
-        setAppState(AppState.ONBOARDING);
-    }
-  };
-
   const resetApp = () => {
     setAppState(AppState.HOME);
     setSongsForPlayer([]);
@@ -407,14 +389,6 @@ const AppContent: React.FC = () => {
     switch (appState) {
       case AppState.ONBOARDING:
         return <Onboarding onHire={handleSaveDJ} onImport={triggerImport} error={error} />;
-      case AppState.ACCOUNT_RECOVERY:
-        if (!dataForRecovery) return <Loader text="Verificando cuenta..." />;
-        return <AccountRecovery 
-            user={user}
-            djs={dataForRecovery} 
-            onContinue={handleContinueFromRecovery} 
-            onStartOver={handleStartOverFromRecovery} 
-        />;
       case AppState.HOME:
         if (!activeDJ) return <Loader text="Cargando tu DJ..." />;
         return <Library activeDJ={activeDJ} onCreateShow={handleCreateShow} onManageDJs={() => setAppState(AppState.DJ_VAULT)} error={error} setError={setError} />;

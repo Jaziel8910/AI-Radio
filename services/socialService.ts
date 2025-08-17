@@ -1,65 +1,126 @@
 
 import { moderateContent } from './geminiService';
+import { Post, AuthorProfile, Comment, ChatMessage, ResidentDJ, PostContent } from '../types';
 
 declare var puter: any;
 
-const isPuterReady = () => typeof puter !== 'undefined' && puter.kv;
+const isPuterReady = () => typeof puter !== 'undefined' && puter.kv && puter.fs;
 
 // --- Social Feed ---
+const FEED_KEY = 'aiRadioSocialFeed_v2';
 
-const FEED_KEY = 'aiRadioSocialFeed_v1';
-
-export interface Post {
-    id: string;
-    authorId: string;
-    authorUsername: string;
-    authorAvatar: string;
-    content: string;
-    timestamp: string; // ISO string
-}
+const uploadImage = async (file: File, userUid: string): Promise<string> => {
+    if (!isPuterReady()) throw new Error("Puter FS no está disponible.");
+    const imagePath = `/ai-radio/posts/${userUid}_${Date.now()}_${file.name}`;
+    await puter.fs.write(imagePath, file);
+    const publicUrl = await puter.fs.getLink(imagePath);
+    if (!publicUrl) throw new Error("No se pudo obtener la URL pública para la imagen.");
+    return publicUrl;
+};
 
 export const getPosts = async (): Promise<Post[]> => {
     if (!isPuterReady()) return [];
     try {
         return (await puter.kv.get(FEED_KEY)) || [];
-    } catch (e) {
-        console.error("Error fetching social feed:", e);
-        return [];
-    }
+    } catch (e) { console.error("Error fetching social feed:", e); return []; }
 };
 
-export const addPost = async (user: any, content: string): Promise<Post | null> => {
-    if (!isPuterReady() || !user) return null;
+export const addPost = async (author: AuthorProfile, content: PostContent, imageFile?: File): Promise<Post | null> => {
+    if (!isPuterReady() || !author) return null;
     
-    // 1. Moderate content
-    const moderation = await moderateContent(content);
-    if (moderation === 'FALSE') {
-        throw new Error("Contenido rechazado por moderación.");
+    const textToModerate = content.text || (content.djPreset ? `¡Miren mi nuevo DJ, ${content.djPreset.name}!` : '');
+    if (textToModerate) {
+        const moderation = await moderateContent(textToModerate);
+        if (moderation === 'FALSE') throw new Error("Contenido rechazado por moderación.");
     }
 
-    // 2. Create post object
+    if (content.type === 'image' && imageFile) {
+        content.imageUrl = await uploadImage(imageFile, author.uid);
+    }
+
     const newPost: Post = {
         id: crypto.randomUUID(),
-        authorId: user.uid,
-        authorUsername: user.username,
-        authorAvatar: user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username[0] || 'A')}&background=a855f7&color=fff`,
-        content: content,
+        author,
+        content,
         timestamp: new Date().toISOString(),
+        likes: [],
+        comments: [],
     };
 
-    // 3. Save to KV
-    try {
-        const posts = await getPosts();
-        posts.unshift(newPost); // Add to the beginning
-        await puter.kv.set(FEED_KEY, posts.slice(0, 100)); // Keep last 100 posts
-        return newPost;
-    } catch (e) {
-        console.error("Error saving post:", e);
-        throw new Error("No se pudo guardar la publicación.");
-    }
+    const posts = await getPosts();
+    posts.unshift(newPost);
+    await puter.kv.set(FEED_KEY, posts.slice(0, 200));
+    return newPost;
 };
 
-// --- Friends System ---
+export const toggleLikePost = async (postId: string, userId: string): Promise<Post[]> => {
+    const posts = await getPosts();
+    const postIndex = posts.findIndex(p => p.id === postId);
+    if (postIndex === -1) return posts;
+
+    const likedIndex = posts[postIndex].likes.indexOf(userId);
+    if (likedIndex > -1) {
+        posts[postIndex].likes.splice(likedIndex, 1); // Unlike
+    } else {
+        posts[postIndex].likes.push(userId); // Like
+    }
+    
+    await puter.kv.set(FEED_KEY, posts);
+    return posts;
+};
+
+export const addComment = async (postId: string, author: AuthorProfile, commentText: string): Promise<Post[]> => {
+    const moderation = await moderateContent(commentText);
+    if (moderation === 'FALSE') throw new Error("Comentario rechazado por moderación.");
+
+    const posts = await getPosts();
+    const postIndex = posts.findIndex(p => p.id === postId);
+    if (postIndex === -1) return posts;
+
+    const newComment: Comment = {
+        id: crypto.randomUUID(),
+        author,
+        content: commentText,
+        timestamp: new Date().toISOString(),
+    };
+    posts[postIndex].comments.push(newComment);
+    
+    await puter.kv.set(FEED_KEY, posts);
+    return posts;
+};
+
+// --- Friends & Chat System ---
+
+const getChatKey = (uid1: string, uid2: string) => `aiRadio_chat_${[uid1, uid2].sort().join('_')}`;
+
+export const getChatMessages = async (uid1: string, uid2: string): Promise<ChatMessage[]> => {
+    if (!isPuterReady()) return [];
+    try {
+        return (await puter.kv.get(getChatKey(uid1, uid2))) || [];
+    } catch(e) { console.error("Error fetching chat:", e); return []; }
+};
+
+export const sendChatMessage = async (fromUser: AuthorProfile, toUid: string, text: string): Promise<ChatMessage> => {
+    if (!isPuterReady()) throw new Error("Puter no está disponible.");
+
+    const moderation = await moderateContent(text);
+    if (moderation === 'FALSE') throw new Error("Mensaje rechazado por moderación.");
+
+    const newMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        fromUid: fromUser.uid,
+        toUid: toUid,
+        text: text,
+        timestamp: new Date().toISOString(),
+        read: false,
+    };
+
+    const messages = await getChatMessages(fromUser.uid, toUid);
+    messages.push(newMessage);
+    await puter.kv.set(getChatKey(fromUser.uid, toUid), messages.slice(-200)); // Guardar últimos 200 mensajes
+    return newMessage;
+};
+
 const getFriendsKey = (userId: string) => `aiRadio_friends_${userId}`;
 const getRequestsKey = (userId: string) => `aiRadio_friend_requests_${userId}`;
 

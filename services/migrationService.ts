@@ -1,6 +1,5 @@
 
-
-import { ResidentDJ, LibrarySong, ListeningHistory, DJDiaryEntry, CustomizationOptions, Intention } from '../types';
+import { ResidentDJ, LibrarySong, ListeningHistory, DJDiaryEntry, CustomizationOptions, Intention, AppSettings } from '../types';
 import * as djService from './djService';
 import * as libraryService from './libraryService';
 import { clearSessionStore } from './sessionFileService';
@@ -38,8 +37,9 @@ export const migrateAllFromLocalStorage = async (): Promise<void> => {
                 id: crypto.randomUUID(),
                 name: legacyDJ.name,
                 persona: legacyDJ.persona,
-                dna: { humor: 0, energy: 0, knowledge: 0, tone: 0 },
+                dna: { humor: 0, energy: 0, knowledge: 0, tone: 0, pace: 0, pitch: 0 },
                 voiceLanguage: 'es-ES',
+                voiceId: 'Lucia',
                 voiceEngine: 'generative',
             };
             await djService.saveDJs([newDJ]);
@@ -102,6 +102,7 @@ interface BackupData {
         history: ListeningHistory;
         diaries: Record<string, DJDiaryEntry[]>;
         preferences: Record<string, Partial<CustomizationOptions>>;
+        settings: AppSettings;
     }
 }
 
@@ -112,6 +113,7 @@ export const exportUserData = async (): Promise<BackupData> => {
     const activeDJId = await djService.getActiveDJId();
     const library = await libraryService.getAllSongs();
     const history = await puter.kv.get('aiRadioListeningHistory') || {};
+    const settings = await puter.kv.get('aiRadioAppSettings') || {};
 
     const diaries: Record<string, DJDiaryEntry[]> = {};
     for (const dj of djs) {
@@ -133,7 +135,7 @@ export const exportUserData = async (): Promise<BackupData> => {
     return {
         version: "1.3-local-playback",
         exportedAt: new Date().toISOString(),
-        data: { djs, activeDJId, library, history, diaries, preferences }
+        data: { djs, activeDJId, library, history, diaries, preferences, settings }
     };
 };
 
@@ -150,7 +152,7 @@ export const importUserData = async (backup: BackupData): Promise<void> => {
     // Clear session store to avoid conflicts with imported data
     clearSessionStore();
 
-    const { djs, activeDJId, library, history, diaries, preferences } = backup.data;
+    const { djs, activeDJId, library, history, diaries, preferences, settings } = backup.data;
     
     // Clear existing data before import
     await deleteAllUserData();
@@ -159,6 +161,7 @@ export const importUserData = async (backup: BackupData): Promise<void> => {
     await djService.setActiveDJId(activeDJId);
     await puter.kv.set('aiRadioSongLibrary_v4_local', library);
     await puter.kv.set('aiRadioListeningHistory', history);
+    await puter.kv.set('aiRadioAppSettings', settings);
 
     for (const [djId, entries] of Object.entries(diaries)) {
         await puter.kv.set(`aiRadioDJDiary_${djId}`, entries);
@@ -195,6 +198,7 @@ export const deleteAllUserData = async (): Promise<void> => {
     await puter.kv.del('aiRadioDJs');
     await puter.kv.del('aiRadioActiveDJId');
     await puter.kv.del('aiRadioListeningHistory');
+    await puter.kv.del('aiRadioAppSettings');
     
     console.log("Datos principales de KV borrados. Proceso completado.");
 };

@@ -1,8 +1,4 @@
 
-
-
-
-
 export type Intention = 'Automatic' | 'Focus' | 'Relax' | 'Celebrate' | 'Nostalgia' | 'Discover';
 
 export interface InitialMetadata {
@@ -149,6 +145,8 @@ export interface DJDNA {
   energy: number;   // -1 (Chill) to 1 (Extremo)
   knowledge: number;// -1 (Cero Datos) to 1 (Enciclopedia)
   tone: number;     // -1 (Amistoso) to 1 (Provocador)
+  pace: number;     // -1 (Lento) to 1 (Rápido)
+  pitch: number;    // -1 (Grave) to 1 (Agudo)
 }
 
 export interface ResidentDJ {
@@ -156,8 +154,9 @@ export interface ResidentDJ {
   name: string;
   persona: DJPersona;
   dna: DJDNA;
-  voiceLanguage?: string; // e.g., 'es-ES' language code
-  voiceEngine?: 'generative';
+  voiceLanguage: string;
+  voiceId: string; 
+  voiceEngine: 'standard' | 'neural' | 'generative';
 }
 
 export interface DJDiaryEntry {
@@ -220,7 +219,6 @@ export interface AppSettings {
 export enum AppState {
   LOADING = 'LOADING',
   ONBOARDING = 'ONBOARDING',
-  ACCOUNT_RECOVERY = 'ACCOUNT_RECOVERY',
   HOME = 'HOME',
   DJ_VAULT = 'DJ_VAULT',
   DJ_EDITOR = 'DJ_EDITOR',
@@ -231,4 +229,44 @@ export enum AppState {
   CREATING_SHOW = 'CREATING_SHOW',
   SHOW_READY = 'SHOW_READY',
   PLAYING = 'PLAYING',
+}
+
+// --- NUEVOS TIPOS PARA LA FUNCIÓN SOCIAL ---
+
+export interface AuthorProfile {
+  uid: string;
+  username: string;
+  avatar: string;
+}
+
+export interface Comment {
+  id: string;
+  author: AuthorProfile;
+  content: string;
+  timestamp: string; // ISO String
+}
+
+export interface PostContent {
+  type: 'text' | 'image' | 'dj_preset_share';
+  text?: string;
+  imageUrl?: string;
+  djPreset?: ResidentDJ; // ¡Para compartir presets de DJs!
+}
+
+export interface Post {
+  id: string;
+  author: AuthorProfile;
+  content: PostContent;
+  timestamp: string; // ISO String
+  likes: string[]; // Array de user uids
+  comments: Comment[];
+}
+
+export interface ChatMessage {
+    id: string;
+    fromUid: string;
+    toUid: string;
+    text: string;
+    timestamp: string; // ISO string
+    read: boolean;
 }
